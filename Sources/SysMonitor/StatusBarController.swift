@@ -31,6 +31,10 @@ class StatusBarController {
         
         if event?.type == .rightMouseUp {
             let menu = NSMenu()
+            let aboutItem = NSMenuItem(title: "About SysMonitor", action: #selector(showAbout(_:)), keyEquivalent: "")
+            aboutItem.target = self
+            menu.addItem(aboutItem)
+            menu.addItem(NSMenuItem.separator())
             menu.addItem(NSMenuItem(title: "Quit SysMonitor", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
             
             // Pop up the menu at the cursor location or properly anchored to button
@@ -46,6 +50,15 @@ class StatusBarController {
                 }
             }
         }
+    }
+    
+    @objc func showAbout(_ sender: AnyObject?) {
+        let alert = NSAlert()
+        alert.messageText = "About SysMonitor"
+        alert.informativeText = "SysMonitor is a simple status bar application that displays your system's CPU and RAM usage."
+        alert.alertStyle = .informational
+        alert.addButton(withTitle: "OK")
+        alert.runModal()
     }
     
     func startTimer() {
