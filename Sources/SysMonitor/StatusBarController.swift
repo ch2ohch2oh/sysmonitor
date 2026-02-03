@@ -17,7 +17,7 @@ class StatusBarController {
         
         if let button = statusItem.button {
             button.title = "Initializing..."
-            button.font = NSFont.monospacedDigitSystemFont(ofSize: 12, weight: .regular)
+            button.font = NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
             button.action = #selector(togglePopover(_:))
             button.target = self
         }
@@ -48,41 +48,57 @@ class StatusBarController {
     private func updateMetrics() {
         let metrics = SystemUsage.shared.currentUsage()
         
-        // Minimalistic format:
-        // C:12% M:32% D:100G N:5K
-        // Or using icons? User asked for minimal standard text.
-        // Let's stick to text for now as it's cleaner.
-        
         // Memory as Percentage: 
         let memPercent = Int((metrics.memoryUsedGB / metrics.memoryTotalGB) * 100)
         
-        // Network: smart formatting
-        let netDown = formatNetwork(metrics.networkDownKBps)
-        let diskRead = formatNetwork(metrics.diskReadKBps)
-        let diskWrite = formatNetwork(metrics.diskWriteKBps)
+        // Fixed width formatting
+        let netDown = formatRate(metrics.networkDownKBps)
+        let diskRead = formatRate(metrics.diskReadKBps)
+        let diskWrite = formatRate(metrics.diskWriteKBps)
         
-        // Condensed format to fit in status bar:
-        // C:10% M:20% R:10K W:5K ↓10K
-        let text = String(format: "C:%2d%% M:%2d%% R:%@ W:%@ ↓%@", 
-                          Int(metrics.cpuUsage),
-                          memPercent,
-                          diskRead,
-                          diskWrite,
-                          netDown)
+        // C:%2d%% -> 2 digits usually sufficient (0-99). 100% will shift slightly but rare.
+        let cpuText = pad(Int(metrics.cpuUsage), width: 2)
+        let memText = pad(memPercent, width: 2)
         
-        // Since we are likely on main thread (due to Timer or MainActor), we might not need dispatch, 
-        // but if updateMetrics is called from background, this ensures safety.
-        // But since this is @MainActor, updateMetrics is on main thread.
+        // R:%@ -> 4 chars from formatRate.
+        let text = "C:\(cpuText)% M:\(memText)% R:\(diskRead) W:\(diskWrite) \(netDown)↓"
+        
         if let button = self.statusItem.button {
+            // Use monospacedDigitSystemFont for compact but stable numbers.
+            button.font = NSFont.monospacedDigitSystemFont(ofSize: 12, weight: .regular)
             button.title = text
         }
 
     }
     
-    private func formatNetwork(_ kbps: Double) -> String {
-        if kbps > 1024 {
-             return String(format: "%.1fM", kbps / 1024)
+    private func pad(_ number: Int, width: Int) -> String {
+        let s = String(number)
+        if s.count < width {
+            // U+2007 is Figure Space (width of a digit)
+            return String(repeating: "\u{2007}", count: width - s.count) + s
         }
-        return String(format: "%.0fK", kbps)
+        return s
+    }
+    
+    private func formatRate(_ kbps: Double) -> String {
+        // Target 4 chars fixed width using figure spaces
+        if kbps < 1000 {
+            // " 999K"
+            return pad(Int(kbps), width: 3) + "K"
+        } else if kbps < 1024 * 10 {
+             // " 1.2M", " 9.9M"
+             // Format manually to count chars?
+             // Simplification: " 9.9M" is 5 chars.
+             // Let's stick to integer precision for M to keep it clean and 4 chars?
+             // "9999K" -> 5 chars.
+             // Let's allow 5 chars total for rates.
+             
+             let mb = kbps / 1024
+             return String(format: "%3.1fM", mb).replacingOccurrences(of: " ", with: "\u{2007}")
+        } else {
+             // " 100M"
+             let mb = kbps / 1024
+             return pad(Int(mb), width: 3) + "M"
+        }
     }
 }
