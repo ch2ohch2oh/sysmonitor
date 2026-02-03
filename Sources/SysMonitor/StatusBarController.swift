@@ -82,7 +82,7 @@ class StatusBarController {
         let memText = pad(memPercent, width: 2)
         
         // Only CPU and Memory
-        let text = "C:\(cpuText)% M:\(memText)%"
+        let text = "CPU:\(cpuText)% RAM:\(memText)%"
         
         if let button = self.statusItem.button {
             // Use monospacedDigitSystemFont for compact but stable numbers.
