@@ -1,11 +1,14 @@
 import Foundation
 import Darwin
+import IOKit
 
 struct UsageMetrics {
     var cpuUsage: Double
     var memoryUsedGB: Double
     var memoryTotalGB: Double
     var diskFreeGB: Double
+    var diskReadKBps: Double
+    var diskWriteKBps: Double
     var networkDownKBps: Double
     var networkUpKBps: Double
 }
@@ -23,19 +26,29 @@ class SystemUsage {
     private var previousBytesOut: UInt64 = 0
     private var lastNetworkCheckTime: TimeInterval = 0
     
+    // Disk IO State
+    private var previousDiskRead: UInt64 = 0
+    private var previousDiskWrite: UInt64 = 0
+    private var lastDiskCheckTime: TimeInterval = 0
+    
     init() {
         // Initialize CPU baseline
         let _ = getCPU()
         // Initialize Network baseline
         let _ = getNetwork()
+        // Initialize Disk IO baseline
+        let _ = getDiskIO()
     }
     
     func currentUsage() -> UsageMetrics {
+        let (diskRead, diskWrite) = getDiskIO()
         return UsageMetrics(
             cpuUsage: getCPU(),
             memoryUsedGB: getMemory().used,
             memoryTotalGB: getMemory().total,
             diskFreeGB: getDisk(),
+            diskReadKBps: diskRead,
+            diskWriteKBps: diskWrite,
             networkDownKBps: getNetwork().down,
             networkUpKBps: getNetwork().up
         )
@@ -139,6 +152,59 @@ class SystemUsage {
             }
         } catch {}
         return 0.0
+    }
+    
+    private func getDiskIO() -> (read: Double, write: Double) {
+        var totalRead: UInt64 = 0
+        var totalWrite: UInt64 = 0
+        
+        let matchDict = IOServiceMatching("IOBlockStorageDriver")
+        var iterator = io_iterator_t()
+        
+        let result = IOServiceGetMatchingServices(kIOMainPortDefault, matchDict, &iterator)
+        
+        if result == KERN_SUCCESS {
+            while case let service = IOIteratorNext(iterator), service != 0 {
+                var props: Unmanaged<CFMutableDictionary>?
+                if IORegistryEntryCreateCFProperties(service, &props, kCFAllocatorDefault, 0) == KERN_SUCCESS,
+                   let properties = props?.takeRetainedValue() as? [String: Any] {
+                    
+                    if let statistics = properties["Statistics"] as? [String: Any] {
+                        if let bytesRead = statistics["Bytes (Read)"] as? Int64 {
+                            totalRead += UInt64(bytesRead)
+                        }
+                        if let bytesWritten = statistics["Bytes (Write)"] as? Int64 {
+                            totalWrite += UInt64(bytesWritten)
+                        }
+                    }
+                }
+                IOObjectRelease(service)
+            }
+            IOObjectRelease(iterator)
+        }
+        
+        let now = Date().timeIntervalSince1970
+        var readRate = 0.0
+        var writeRate = 0.0
+        
+        if lastDiskCheckTime > 0 {
+            let dt = now - lastDiskCheckTime
+            if dt > 0 {
+                // Bytes -> KBps
+                if totalRead >= previousDiskRead {
+                     readRate = Double(totalRead - previousDiskRead) / dt / 1024.0
+                }
+                if totalWrite >= previousDiskWrite {
+                     writeRate = Double(totalWrite - previousDiskWrite) / dt / 1024.0
+                }
+            }
+        }
+        
+        previousDiskRead = totalRead
+        previousDiskWrite = totalWrite
+        lastDiskCheckTime = now
+        
+        return (readRate, writeRate)
     }
     
     // MARK: - Network

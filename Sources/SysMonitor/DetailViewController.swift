@@ -71,7 +71,9 @@ class DetailViewController: NSViewController {
         
         cpuLabel.stringValue = String(format: "CPU Usage: %.1f%%", metrics.cpuUsage)
         memoryLabel.stringValue = String(format: "Memory: %.1f / %.0f GB", metrics.memoryUsedGB, metrics.memoryTotalGB)
-        diskLabel.stringValue = String(format: "Disk Free: %.0f GB", metrics.diskFreeGB)
+        let diskRead = formatNetwork(metrics.diskReadKBps) // Reuse formatNetwork for KB/MB logic
+        let diskWrite = formatNetwork(metrics.diskWriteKBps)
+        diskLabel.stringValue = String(format: "Disk: Free %.0fGB (R:%@ W:%@)", metrics.diskFreeGB, diskRead, diskWrite)
         
         let downText = formatNetwork(metrics.networkDownKBps)
         let upText = formatNetwork(metrics.networkUpKBps)

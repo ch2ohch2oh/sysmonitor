@@ -58,11 +58,16 @@ class StatusBarController {
         
         // Network: smart formatting
         let netDown = formatNetwork(metrics.networkDownKBps)
+        let diskRead = formatNetwork(metrics.diskReadKBps)
+        let diskWrite = formatNetwork(metrics.diskWriteKBps)
         
-        let text = String(format: "C:%2d%% M:%2d%% D:%.0fG ↓%@", 
+        // Condensed format to fit in status bar:
+        // C:10% M:20% R:10K W:5K ↓10K
+        let text = String(format: "C:%2d%% M:%2d%% R:%@ W:%@ ↓%@", 
                           Int(metrics.cpuUsage),
                           memPercent,
-                          metrics.diskFreeGB,
+                          diskRead,
+                          diskWrite,
                           netDown)
         
         // Since we are likely on main thread (due to Timer or MainActor), we might not need dispatch, 
