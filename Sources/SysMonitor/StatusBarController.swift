@@ -4,24 +4,35 @@ import Cocoa
 class StatusBarController {
     private var statusBar: NSStatusBar
     private var statusItem: NSStatusItem
+    private var popover: NSPopover
     private var timer: Timer?
     
     init() {
         statusBar = NSStatusBar.system
-        // Variable length to accommodate changing text
         statusItem = statusBar.statusItem(withLength: NSStatusItem.variableLength)
+        
+        popover = NSPopover()
+        popover.contentViewController = DetailViewController()
+        popover.behavior = .transient
         
         if let button = statusItem.button {
             button.title = "Initializing..."
             button.font = NSFont.monospacedDigitSystemFont(ofSize: 12, weight: .regular)
+            button.action = #selector(togglePopover(_:))
+            button.target = self
         }
         
-        // Setup menu
-        let menu = NSMenu()
-        menu.addItem(NSMenuItem(title: "Quit SysMonitor", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
-        statusItem.menu = menu
-        
         startTimer()
+    }
+    
+    @objc func togglePopover(_ sender: AnyObject?) {
+        if let button = statusItem.button {
+            if popover.isShown {
+                popover.performClose(sender)
+            } else {
+                popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
+            }
+        }
     }
     
     func startTimer() {
