@@ -53,9 +53,22 @@ class StatusBarController {
     }
     
     @objc func showAbout(_ sender: AnyObject?) {
+        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "Unknown"
+        let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "Unknown"
+        
+        let year = Calendar.current.component(.year, from: Date())
+        let copyright = "Copyright © \(year) SysMonitor. All rights reserved."
+        
         let alert = NSAlert()
         alert.messageText = "About SysMonitor"
-        alert.informativeText = "SysMonitor is a simple status bar application that displays your system's CPU and RAM usage."
+        alert.informativeText = """
+        SysMonitor
+        Version \(version) (Build \(build))
+        
+        A simple status bar application that displays your system's CPU and RAM usage.
+
+        \(copyright)
+        """
         alert.alertStyle = .informational
         alert.addButton(withTitle: "OK")
         alert.runModal()
