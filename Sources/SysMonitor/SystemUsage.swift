@@ -6,11 +6,8 @@ struct UsageMetrics {
     var cpuUsage: Double
     var memoryUsedGB: Double
     var memoryTotalGB: Double
-    var diskFreeGB: Double
-    var diskReadKBps: Double
-    var diskWriteKBps: Double
-    var networkDownKBps: Double
-    var networkUpKBps: Double
+    var diskUsedGB: Double
+    var diskTotalGB: Double
 }
 
 @MainActor
@@ -21,36 +18,21 @@ class SystemUsage {
     private var previousInfo = processor_info_array_t(bitPattern: 0)
     private var previousCount = mach_msg_type_number_t(0)
     
-    // Network State
-    private var previousBytesIn: UInt64 = 0
-    private var previousBytesOut: UInt64 = 0
-    private var lastNetworkCheckTime: TimeInterval = 0
-    
-    // Disk IO State
-    private var previousDiskRead: UInt64 = 0
-    private var previousDiskWrite: UInt64 = 0
-    private var lastDiskCheckTime: TimeInterval = 0
+
     
     init() {
         // Initialize CPU baseline
         let _ = getCPU()
-        // Initialize Network baseline
-        let _ = getNetwork()
-        // Initialize Disk IO baseline
-        let _ = getDiskIO()
     }
     
     func currentUsage() -> UsageMetrics {
-        let (diskRead, diskWrite) = getDiskIO()
+        let (diskUsed, diskTotal) = getDisk()
         return UsageMetrics(
             cpuUsage: getCPU(),
             memoryUsedGB: getMemory().used,
             memoryTotalGB: getMemory().total,
-            diskFreeGB: getDisk(),
-            diskReadKBps: diskRead,
-            diskWriteKBps: diskWrite,
-            networkDownKBps: getNetwork().down,
-            networkUpKBps: getNetwork().up
+            diskUsedGB: diskUsed,
+            diskTotalGB: diskTotal
         )
     }
     
@@ -143,113 +125,21 @@ class SystemUsage {
     }
     
     // MARK: - Disk
-    private func getDisk() -> Double {
+    private func getDisk() -> (used: Double, total: Double) {
         let fileURL = URL(fileURLWithPath: "/")
         do {
-            let values = try fileURL.resourceValues(forKeys: [.volumeAvailableCapacityKey])
-            if let capacity = values.volumeAvailableCapacity {
-                return Double(capacity) / 1024 / 1024 / 1024
+            let values = try fileURL.resourceValues(forKeys: [.volumeAvailableCapacityKey, .volumeTotalCapacityKey])
+            if let capacity = values.volumeAvailableCapacity, let total = values.volumeTotalCapacity {
+                let totalGB = Double(total) / 1024 / 1024 / 1024
+                let freeGB = Double(capacity) / 1024 / 1024 / 1024
+                let usedGB = totalGB - freeGB
+                return (usedGB, totalGB)
             }
         } catch {}
-        return 0.0
+        return (0.0, 0.0)
     }
     
-    private func getDiskIO() -> (read: Double, write: Double) {
-        var totalRead: UInt64 = 0
-        var totalWrite: UInt64 = 0
-        
-        let matchDict = IOServiceMatching("IOBlockStorageDriver")
-        var iterator = io_iterator_t()
-        
-        let result = IOServiceGetMatchingServices(kIOMainPortDefault, matchDict, &iterator)
-        
-        if result == KERN_SUCCESS {
-            while case let service = IOIteratorNext(iterator), service != 0 {
-                var props: Unmanaged<CFMutableDictionary>?
-                if IORegistryEntryCreateCFProperties(service, &props, kCFAllocatorDefault, 0) == KERN_SUCCESS,
-                   let properties = props?.takeRetainedValue() as? [String: Any] {
-                    
-                    if let statistics = properties["Statistics"] as? [String: Any] {
-                        if let bytesRead = statistics["Bytes (Read)"] as? Int64 {
-                            totalRead += UInt64(bytesRead)
-                        }
-                        if let bytesWritten = statistics["Bytes (Write)"] as? Int64 {
-                            totalWrite += UInt64(bytesWritten)
-                        }
-                    }
-                }
-                IOObjectRelease(service)
-            }
-            IOObjectRelease(iterator)
-        }
-        
-        let now = Date().timeIntervalSince1970
-        var readRate = 0.0
-        var writeRate = 0.0
-        
-        if lastDiskCheckTime > 0 {
-            let dt = now - lastDiskCheckTime
-            if dt > 0 {
-                // Bytes -> KBps
-                if totalRead >= previousDiskRead {
-                     readRate = Double(totalRead - previousDiskRead) / dt / 1024.0
-                }
-                if totalWrite >= previousDiskWrite {
-                     writeRate = Double(totalWrite - previousDiskWrite) / dt / 1024.0
-                }
-            }
-        }
-        
-        previousDiskRead = totalRead
-        previousDiskWrite = totalWrite
-        lastDiskCheckTime = now
-        
-        return (readRate, writeRate)
-    }
+
     
-    // MARK: - Network
-    // This part requires checking getifaddrs which is C API.
-    private func getNetwork() -> (down: Double, up: Double) {
-        var ifaddr: UnsafeMutablePointer<ifaddrs>?
-        guard getifaddrs(&ifaddr) == 0 else { return (0, 0) }
-        defer { freeifaddrs(ifaddr) }
-        
-        var totalIn: UInt64 = 0
-        var totalOut: UInt64 = 0
-        
-        var ptr = ifaddr
-        while ptr != nil {
-            let name = String(cString: ptr!.pointee.ifa_name)
-            // Filter likely primary interfaces: en0, en1
-             if (name == "en0" || name == "en1") && ptr!.pointee.ifa_addr.pointee.sa_family == UInt8(AF_LINK) {
-                 let data = unsafeBitCast(ptr!.pointee.ifa_data, to: UnsafeMutablePointer<if_data>.self)
-                 totalIn += UInt64(data.pointee.ifi_ibytes)
-                 totalOut += UInt64(data.pointee.ifi_obytes)
-             }
-            ptr = ptr!.pointee.ifa_next
-        }
-        
-        let now = Date().timeIntervalSince1970
-        var downRate = 0.0
-        var upRate = 0.0
-        
-        if lastNetworkCheckTime > 0 {
-            let dt = now - lastNetworkCheckTime
-            if dt > 0 {
-                // Bytes per second -> KBps
-                if totalIn >= previousBytesIn {
-                    downRate = Double(totalIn - previousBytesIn) / dt / 1024.0
-                }
-                if totalOut >= previousBytesOut {
-                    upRate = Double(totalOut - previousBytesOut) / dt / 1024.0
-                }
-            }
-        }
-        
-        previousBytesIn = totalIn
-        previousBytesOut = totalOut
-        lastNetworkCheckTime = now
-        
-        return (downRate, upRate)
-    }
+
 }

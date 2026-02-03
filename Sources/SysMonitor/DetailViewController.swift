@@ -35,12 +35,15 @@ class DetailViewController: NSViewController {
     private let diskIcon = NSImageView(image: NSImage(systemSymbolName: "internaldrive", accessibilityDescription: "Disk") ?? NSImage())
     private let diskLabel = NSTextField(labelWithString: "Disk")
     private let diskValueLabel = NSTextField(labelWithString: "-")
-    private let diskSpeedLabel = NSTextField(labelWithString: "-")
+
+    private let diskLevel: NSLevelIndicator = {
+        let level = NSLevelIndicator()
+        level.levelIndicatorStyle = .continuousCapacity
+        level.controlSize = .small
+        return level
+    }()
     
-    // Network
-    private let netIcon = NSImageView(image: NSImage(systemSymbolName: "network", accessibilityDescription: "Network") ?? NSImage())
-    private let netLabel = NSTextField(labelWithString: "Net")
-    private let netValueLabel = NSTextField(labelWithString: "-")
+
     
     // Timer
     private var timer: Timer?
@@ -86,8 +89,7 @@ class DetailViewController: NSViewController {
             gridView.topAnchor.constraint(equalTo: view.topAnchor, constant: 16),
             gridView.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 16),
             gridView.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -16),
-            gridView.bottomAnchor.constraint(equalTo: view.bottomAnchor, constant: -16),
-            gridView.widthAnchor.constraint(greaterThanOrEqualToConstant: 260)
+            gridView.bottomAnchor.constraint(equalTo: view.bottomAnchor, constant: -16)
         ])
         
         // Add Rows
@@ -98,29 +100,16 @@ class DetailViewController: NSViewController {
         // Memory
         gridView.addRow(with: [memoryIcon, memoryLabel, memoryLevel, memoryValueLabel])
         
-        // Disk Space
-        // Icon | "Disk" | "Free: 500 GB" (merged Col 2-3)
-        gridView.addRow(with: [diskIcon, diskLabel, diskValueLabel])
-        gridView.mergeCells(inHorizontalRange: NSRange(location: 2, length: 2), verticalRange: NSRange(location: 2, length: 1))
+        // Disk
+        gridView.addRow(with: [diskIcon, diskLabel, diskLevel, diskValueLabel])
         
-        // Disk IO
-        // (Merged Icon) | (Merged Label) | "R: 12M W: 5M" (merged Col 2-3)
-        gridView.addRow(with: [NSGridCell.emptyContentView, NSGridCell.emptyContentView, diskSpeedLabel])
-        gridView.mergeCells(inHorizontalRange: NSRange(location: 2, length: 2), verticalRange: NSRange(location: 3, length: 1))
-        
-        // Vertical Merges for Disk Icon/Label
-        gridView.mergeCells(inHorizontalRange: NSRange(location: 0, length: 1), verticalRange: NSRange(location: 2, length: 2))
-        gridView.mergeCells(inHorizontalRange: NSRange(location: 1, length: 1), verticalRange: NSRange(location: 2, length: 2))
-        
-        // Network
-        gridView.addRow(with: [netIcon, netLabel, netValueLabel])
-        gridView.mergeCells(inHorizontalRange: NSRange(location: 2, length: 2), verticalRange: NSRange(location: 4, length: 1))
+
         
         // Stabilize Column Widths
         gridView.column(at: 0).width = 18
         gridView.column(at: 1).width = 36
         gridView.column(at: 2).width = 80
-        gridView.column(at: 3).width = 70
+        // gridView.column(at: 3).width = 70 // Removed to allow disk stack to expand
     }
     
     private func setupStyling() {
@@ -128,8 +117,8 @@ class DetailViewController: NSViewController {
         let font = NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .regular)
         
         let allLabels = [
-            cpuLabel, memoryLabel, diskLabel, netLabel,
-            cpuValueLabel, memoryValueLabel, diskValueLabel, diskSpeedLabel, netValueLabel
+            cpuLabel, memoryLabel, diskLabel,
+            cpuValueLabel, memoryValueLabel, diskValueLabel
         ]
         
         for label in allLabels {
@@ -138,7 +127,7 @@ class DetailViewController: NSViewController {
         }
         
         // Icons tint
-        let icons = [cpuIcon, memoryIcon, diskIcon, netIcon]
+        let icons = [cpuIcon, memoryIcon, diskIcon]
         for icon in icons {
             icon.contentTintColor = .labelColor
             icon.symbolConfiguration = .init(scale: .small)
@@ -147,15 +136,10 @@ class DetailViewController: NSViewController {
         // Level Indicators
         cpuLevel.widthAnchor.constraint(equalToConstant: 80).isActive = true
         memoryLevel.widthAnchor.constraint(equalToConstant: 80).isActive = true
+        diskLevel.widthAnchor.constraint(equalToConstant: 80).isActive = true
         
-        // Align Disk Label to the top of the merged cell since it spans 2 rows
+        // Align Disk Label
         diskLabel.alignment = .left 
-        // Note: Vertical alignment in merged cells can be tricky.
-        // Grid View aligns vertically based on rowAlignment.
-        // Since we merged vertically, let's see how it looks.
-        // Usually it centers vertically.
-        // We might want to center the Icon/Label vertically in the 2-row span.
-        // The default central alignment is effectively what we want for the group.
     }
     
     private func startTimer() {
@@ -177,28 +161,15 @@ class DetailViewController: NSViewController {
         // Memory
         memoryLevel.maxValue = metrics.memoryTotalGB
         memoryLevel.doubleValue = metrics.memoryUsedGB
-        memoryValueLabel.stringValue = String(format: "%.1f GB", metrics.memoryUsedGB)
+        memoryValueLabel.stringValue = String(format: "%.1f/%.1f GB", metrics.memoryUsedGB, metrics.memoryTotalGB)
         
         // Disk
-        let diskRead = formatNetwork(metrics.diskReadKBps)
-        let diskWrite = formatNetwork(metrics.diskWriteKBps)
-        diskSpeedLabel.stringValue = "R:\(diskRead) W:\(diskWrite)"
-        diskValueLabel.stringValue = String(format: "%.0f GB Free", metrics.diskFreeGB)
+        diskLevel.maxValue = metrics.diskTotalGB
+        diskLevel.doubleValue = metrics.diskUsedGB
         
-        // Network
-        let downText = formatNetwork(metrics.networkDownKBps)
-        let upText = formatNetwork(metrics.networkUpKBps)
-        netValueLabel.stringValue = "↓\(downText) ↑\(upText)"
+        diskValueLabel.stringValue = String(format: "%.0f/%.0f GB", metrics.diskUsedGB, metrics.diskTotalGB)
     }
     
-    private func formatNetwork(_ kbps: Double) -> String {
-        // Padded to constant length
-        // "100.0 M" -> 7 chars
-        if kbps > 1024 {
-             let val = kbps / 1024
-             // %5.1f ensures " 12.3" or "123.4"
-             return String(format: "%5.1f M", val)
-        }
-        return String(format: "%5.0f K", kbps)
-    }
+
+
 }
