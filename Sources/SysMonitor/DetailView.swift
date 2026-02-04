@@ -14,10 +14,11 @@ struct DetailView: View {
                 Text("CPU")
                     .frame(width: 36, alignment: .leading)
                 Text(String(format: "%.0f%%", viewModel.metrics.cpuUsage))
+                    .monospacedDigit()
                     .frame(alignment: .leading)
                 Spacer()
             }
-            .font(.system(size: 11, weight: .regular, design: .monospaced))
+            .font(.system(size: 11, weight: .regular))
             .contextMenu {
                 Button(action: {
                     showPerCore = false
@@ -57,10 +58,11 @@ struct DetailView: View {
                 Text("GPU")
                     .frame(width: 36, alignment: .leading)
                 Text(String(format: "%.0f%%", viewModel.metrics.gpuUsage))
+                    .monospacedDigit()
                     .frame(alignment: .leading)
                 Spacer()
             }
-            .font(.system(size: 11, weight: .regular, design: .monospaced))
+            .font(.system(size: 11, weight: .regular))
             
             HistoryView(history: viewModel.gpuHistory, color: .purple)
                 .frame(height: 40)
@@ -72,10 +74,11 @@ struct DetailView: View {
                 Text("RAM")
                     .frame(width: 36, alignment: .leading)
                 Text(String(format: "%.1f/%.1f GB", viewModel.metrics.memoryUsedGB, viewModel.metrics.memoryTotalGB))
+                    .monospacedDigit()
                     .frame(alignment: .leading)
                 Spacer()
             }
-            .font(.system(size: 11, weight: .regular, design: .monospaced))
+            .font(.system(size: 11, weight: .regular))
             
             HistoryView(history: viewModel.memoryHistory, color: .green)
                 .frame(height: 40)
@@ -87,10 +90,11 @@ struct DetailView: View {
                 Text("Disk")
                     .frame(width: 36, alignment: .leading)
                 Text(String(format: "%.0f/%.0f GB", viewModel.metrics.diskUsedGB, viewModel.metrics.diskTotalGB))
+                    .monospacedDigit()
                     .frame(alignment: .leading)
                 Spacer()
             }
-            .font(.system(size: 11, weight: .regular, design: .monospaced))
+            .font(.system(size: 11, weight: .regular))
             
             // Custom Disk Indicator to avoid ProgressView animation
             GeometryReader { geometry in
@@ -110,7 +114,7 @@ struct DetailView: View {
         }
         .padding(16)
         .frame(width: 220)
-        .background(VisualEffectView(material: .popover, blendingMode: .behindWindow))
+        .background(VisualEffectView(material: .headerView, blendingMode: .behindWindow, state: .inactive))
         .clipShape(RoundedRectangle(cornerRadius: 12))
     }
 }
