@@ -1,4 +1,4 @@
-# SysMonitor
+# <img src="icon_source.png" width="48" align="center" /> SysMonitor
 
 SysMonitor is a lightweight, menu-bar system resource monitor for macOS. It provides real-time updates for:
 
@@ -6,7 +6,7 @@ SysMonitor is a lightweight, menu-bar system resource monitor for macOS. It prov
 - **RAM Usage**: Real-time percentage and Used/Total GB.
 - **Disk Usage**: Used/Total GB.
 
-## Installation
+ ## Installation
 
 1. **Unzip the App**: Double-click `SysMonitor.zip` to extract `SysMonitor.app`.
 2. **Move to Applications**: Drag `SysMonitor.app` into your `Applications` folder.
