@@ -79,6 +79,10 @@ class StatusBarController {
     }
     
     func startTimer() {
+        timer?.invalidate()
+        
+        updateMetrics() // Fire once immediately
+        
         timer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { [weak self] _ in
             Task { @MainActor in
                 self?.updateMetrics()
@@ -88,13 +92,10 @@ class StatusBarController {
     
     private func updateMetrics() {
         Task {
-            let metrics = await SystemUsage.shared.metrics
+            let metrics = await SystemUsage.shared.currentUsage()
             
             // Memory as Percentage:
-            var memPercent = 0
-            if metrics.memoryTotalGB > 0 {
-                memPercent = Int((metrics.memoryUsedGB / metrics.memoryTotalGB) * 100)
-            }
+            let memPercent = Int((metrics.memoryUsedGB / metrics.memoryTotalGB) * 100)
             
             // C:%2d%% -> 2 digits usually sufficient (0-99). 100% will shift slightly but rare.
             let cpuText = String(format: "%2d", Int(metrics.cpuUsage))
@@ -103,10 +104,12 @@ class StatusBarController {
             // Only CPU and Memory
             let text = "CPU:\(cpuText)% RAM:\(memText)%"
             
-            if let button = self.statusItem.button {
-                // Use monospacedDigitSystemFont for compact but stable numbers.
-                button.font = NSFont.monospacedDigitSystemFont(ofSize: 12, weight: .regular)
-                button.title = text
+            await MainActor.run {
+                if let button = self.statusItem.button {
+                    // Use monospacedDigitSystemFont for compact but stable numbers.
+                    button.font = NSFont.monospacedDigitSystemFont(ofSize: 12, weight: .regular)
+                    button.title = text
+                }
             }
         }
     }
