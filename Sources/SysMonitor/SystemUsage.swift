@@ -4,6 +4,7 @@ import IOKit
 
 struct UsageMetrics {
     var cpuUsage: Double
+    var perCoreUsage: [Double]
     var gpuUsage: Double
     var memoryUsedGB: Double
     var memoryTotalGB: Double
@@ -29,8 +30,10 @@ actor SystemUsage {
     
     func currentUsage() async -> UsageMetrics {
         let (diskUsed, diskTotal) = getDisk()
+        let (cpu, perCore) = await getCPU()
         return UsageMetrics(
-            cpuUsage: await getCPU(),
+            cpuUsage: cpu,
+            perCoreUsage: perCore,
             gpuUsage: getGPU(),
             memoryUsedGB: getMemory().used,
             memoryTotalGB: getMemory().total,
@@ -40,7 +43,7 @@ actor SystemUsage {
     }
     
     // MARK: - CPU
-    private func getCPU() async -> Double {
+    private func getCPU() async -> (Double, [Double]) {
         var count = mach_msg_type_number_t(0)
         var info = processor_info_array_t(bitPattern: 0)
         let host = mach_host_self()
@@ -49,14 +52,16 @@ actor SystemUsage {
         let result = host_processor_info(host, PROCESSOR_CPU_LOAD_INFO, &count, &info, &msgCount)
         
         guard result == KERN_SUCCESS, let infoArray = info else {
-            return 0.0
+            return (0.0, [])
         }
         
         var totalSystem: Int32 = 0
         var totalUser: Int32 = 0
         var totalIdle: Int32 = 0
         
-        let numCPUs = Int(count) / Int(CPU_STATE_MAX)
+        // 'count' is the number of processors (not the number of integers in info array)
+        let numCPUs = Int(count)
+        var coreUsages: [Double] = []
         
         if let prevInfo = previousInfo {
             for i in 0..<numCPUs {
@@ -68,6 +73,15 @@ actor SystemUsage {
                 let nice = infoArray[baseIndex + Int(CPU_STATE_NICE)] - prevInfo[baseIndex + Int(CPU_STATE_NICE)]
                 let idle = infoArray[baseIndex + Int(CPU_STATE_IDLE)] - prevInfo[baseIndex + Int(CPU_STATE_IDLE)]
                 
+                let coreTotal = user + system + nice + idle
+                let coreUsed = user + system + nice
+                
+                if coreTotal > 0 {
+                    coreUsages.append(Double(coreUsed) / Double(coreTotal) * 100.0)
+                } else {
+                    coreUsages.append(0.0)
+                }
+                
                 totalUser += user + nice
                 totalSystem += system
                 totalIdle += idle
@@ -75,6 +89,9 @@ actor SystemUsage {
             
             let prevSize = Int(previousCount) * MemoryLayout<integer_t>.size
             vm_deallocate(mach_task_self_, vm_address_t(bitPattern: prevInfo), vm_size_t(prevSize))
+        } else {
+            // First run, populate 0s
+            coreUsages = Array(repeating: 0.0, count: numCPUs)
         }
         
         // Update previous
@@ -82,9 +99,10 @@ actor SystemUsage {
         previousCount = count
         
         let total = totalSystem + totalUser + totalIdle
-        if total == 0 { return 0.0 }
+        if total == 0 { return (0.0, coreUsages) }
         
-        return Double(totalSystem + totalUser) / Double(total) * 100.0
+        let overall = Double(totalSystem + totalUser) / Double(total) * 100.0
+        return (overall, coreUsages)
     }
     
     // MARK: - GPU

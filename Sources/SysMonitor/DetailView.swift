@@ -2,6 +2,7 @@ import SwiftUI
 
 struct DetailView: View {
     @ObservedObject var viewModel: SystemUsageViewModel
+    @State private var showPerCore = false
     
     var body: some View {
         VStack(spacing: 12) {
@@ -17,9 +18,33 @@ struct DetailView: View {
                 Spacer()
             }
             .font(.system(size: 11, weight: .regular, design: .monospaced))
+            .contextMenu {
+                Button(action: {
+                    showPerCore = false
+                }) {
+                    Text("Overall Usage")
+                    if !showPerCore { Image(systemName: "checkmark") }
+                }
+                
+                Button(action: {
+                    showPerCore = true
+                }) {
+                    Text("Per-Core Usage")
+                    if showPerCore { Image(systemName: "checkmark") }
+                }
+            }
             
-            HistoryView(history: viewModel.cpuHistory, color: .blue)
-                .frame(height: 40)
+            if showPerCore {
+                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 4), count: 4), spacing: 4) {
+                    ForEach(0..<viewModel.perCoreHistory.count, id: \.self) { index in
+                        HistoryView(history: viewModel.perCoreHistory[index], color: .blue)
+                            .frame(height: 25)
+                    }
+                }
+            } else {
+                HistoryView(history: viewModel.cpuHistory, color: .blue)
+                    .frame(height: 40)
+            }
             
             // GPU
             HStack {

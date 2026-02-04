@@ -15,7 +15,9 @@ class StatusBarController {
     
     init() {
         statusBar = NSStatusBar.system
-        statusItem = statusBar.statusItem(withLength: NSStatusItem.variableLength)
+        // Use fixed length to avoid popover moving around when text width changes
+        // Increased to 150 to prevent text wrapping/stacking
+        statusItem = statusBar.statusItem(withLength: 150)
         
         // Pass shared viewModel to DetailView
         let detailView = DetailView(viewModel: viewModel)
@@ -48,14 +50,16 @@ class StatusBarController {
         // Memory as Percentage:
         let memPercent = metrics.memoryTotalGB > 0 ? Int((metrics.memoryUsedGB / metrics.memoryTotalGB) * 100) : 0
         
-        // C:%2d%% -> 2 digits usually sufficient (0-99). 100% will shift slightly but rare.
-        let cpuText = String(format: "%2d", Int(metrics.cpuUsage))
-        let memText = String(format: "%2d", memPercent)
+        // C:%3d%% -> 3 digits. Replace spaces with Figure Space (U+2007) to match digit width.
+        let figureSpace = "\u{2007}"
+        let cpuText = String(format: "%3d", Int(metrics.cpuUsage)).replacingOccurrences(of: " ", with: figureSpace)
+        let memText = String(format: "%3d", memPercent).replacingOccurrences(of: " ", with: figureSpace)
         
         // Only CPU and Memory
         let text = "CPU:\(cpuText)% RAM:\(memText)%"
         
         if let button = self.statusItem.button {
+            // Use monospacedDigitSystemFont: letters are proportional, digits are fixed width.
             button.font = NSFont.monospacedDigitSystemFont(ofSize: 12, weight: .regular)
             button.title = text
         }

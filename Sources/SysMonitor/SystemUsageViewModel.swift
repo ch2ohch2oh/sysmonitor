@@ -3,10 +3,11 @@ import Combine
 
 @MainActor
 class SystemUsageViewModel: ObservableObject {
-    @Published var metrics: UsageMetrics = UsageMetrics(cpuUsage: 0, gpuUsage: 0, memoryUsedGB: 0, memoryTotalGB: 0, diskUsedGB: 0, diskTotalGB: 0)
+    @Published var metrics: UsageMetrics = UsageMetrics(cpuUsage: 0, perCoreUsage: [], gpuUsage: 0, memoryUsedGB: 0, memoryTotalGB: 0, diskUsedGB: 0, diskTotalGB: 0)
     
     // History Data for Charts
     @Published var cpuHistory: [Double]
+    @Published var perCoreHistory: [[Double]] // Index = Core Index
     @Published var gpuHistory: [Double]
     @Published var memoryHistory: [Double]
     
@@ -15,10 +16,11 @@ class SystemUsageViewModel: ObservableObject {
     
     init() {
         // Initialize with zeros so charts scroll in
-        let zeros = Array(repeating: 0.0, count: 60)
+        let zeros = Array(repeating: 0.0, count: maxHistoryPoints)
         cpuHistory = zeros
         gpuHistory = zeros
         memoryHistory = zeros
+        perCoreHistory = [] // Will be initialized when we know core count
         
         startTimer()
     }
@@ -48,10 +50,36 @@ class SystemUsageViewModel: ObservableObject {
             await MainActor.run {
                 self.metrics = newMetrics
                 
-                // Update History
+                // Update CPU History
                 self.addToHistory(&self.cpuHistory, value: newMetrics.cpuUsage)
+                
+                // Update Per-Core History
+                if self.perCoreHistory.isEmpty && !newMetrics.perCoreUsage.isEmpty {
+                    // Initialize with 60 zeros for each core
+                    self.perCoreHistory = newMetrics.perCoreUsage.map { _ in
+                         Array(repeating: 0.0, count: self.maxHistoryPoints)
+                    }
+                }
+                
+                if !newMetrics.perCoreUsage.isEmpty {
+                     if self.perCoreHistory.count != newMetrics.perCoreUsage.count {
+                        // Core count mismatch / fallback re-init
+                        self.perCoreHistory = newMetrics.perCoreUsage.map { _ in
+                             Array(repeating: 0.0, count: self.maxHistoryPoints)
+                        }
+                    }
+                    
+                    for (index, usage) in newMetrics.perCoreUsage.enumerated() {
+                        if index < self.perCoreHistory.count {
+                             self.addToHistory(&self.perCoreHistory[index], value: usage)
+                        }
+                    }
+                }
+                
+                // Update GPU History
                 self.addToHistory(&self.gpuHistory, value: newMetrics.gpuUsage)
                 
+                // Update Memory History
                 let memPercent = newMetrics.memoryTotalGB > 0 ? (newMetrics.memoryUsedGB / newMetrics.memoryTotalGB) * 100.0 : 0.0
                 self.addToHistory(&self.memoryHistory, value: memPercent)
             }
