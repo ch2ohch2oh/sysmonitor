@@ -86,7 +86,9 @@ class StatusBarController {
                     popover.performClose(sender)
                 } else {
                     NSApp.activate(ignoringOtherApps: true)
-                    popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
+                    // Use minY (bottom edge) but offset slightly to avoid overlapping text
+                    let rect = button.bounds.offsetBy(dx: 0, dy: -15)
+                    popover.show(relativeTo: rect, of: button, preferredEdge: .minY)
                 }
             }
         }
