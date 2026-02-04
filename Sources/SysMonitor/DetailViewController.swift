@@ -78,7 +78,6 @@ class DetailViewController: NSViewController {
     
     override func viewWillAppear() {
         super.viewWillAppear()
-        updateMetrics()
         startTimer()
     }
     
@@ -182,7 +181,12 @@ class DetailViewController: NSViewController {
     }
     
     private func startTimer() {
-        timer?.invalidate()
+        timer?.invalidate() // Invalidate existing timer
+        
+        // Fire immediately
+        updateMetrics()
+        
+        // Then schedule
         timer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
             Task { @MainActor in
                 self?.updateMetrics()

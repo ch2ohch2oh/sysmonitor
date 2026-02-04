@@ -76,13 +76,15 @@ class StatusBarController {
     }
     
     func startTimer() {
+        timer?.invalidate()
+        
+        updateMetrics() // Fire once immediately
+        
         timer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { [weak self] _ in
             Task { @MainActor in
                 self?.updateMetrics()
             }
         }
-        // Fire immediately once
-        updateMetrics()
     }
     
     private func updateMetrics() {
