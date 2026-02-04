@@ -23,7 +23,7 @@ class StatusBarController {
         
         popover = NSPopover()
         popover.contentViewController = popoverViewController
-        popover.behavior = .applicationDefined 
+        popover.behavior = .transient 
         
         if let button = statusItem.button {
             button.title = "Initializing..."
