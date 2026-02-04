@@ -6,14 +6,17 @@ class StatusBarController {
     private var statusItem: NSStatusItem
     private var popover: NSPopover
     private var timer: Timer?
+    private var detailViewController: DetailViewController // Strong reference
     
     init() {
         statusBar = NSStatusBar.system
         statusItem = statusBar.statusItem(withLength: NSStatusItem.variableLength)
         
+        detailViewController = DetailViewController()
+        
         popover = NSPopover()
-        popover.contentViewController = DetailViewController()
-        popover.behavior = .transient
+        popover.contentViewController = detailViewController
+        popover.behavior = .applicationDefined // Changed from .transient
         
         if let button = statusItem.button {
             button.title = "Initializing..."
