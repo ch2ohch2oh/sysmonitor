@@ -46,6 +46,7 @@ class StatusBarController {
                 if popover.isShown {
                     popover.performClose(sender)
                 } else {
+                    NSApp.activate(ignoringOtherApps: true)
                     popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
                 }
             }
