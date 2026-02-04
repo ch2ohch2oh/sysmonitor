@@ -32,7 +32,7 @@ class HistoryChartView: NSView {
     private func commonInit() {
         wantsLayer = true
         // Darker background for the chart area
-        layer?.backgroundColor = NSColor.black.withAlphaComponent(0.05).cgColor
+        layer?.backgroundColor = NSColor.controlBackgroundColor.cgColor
         layer?.cornerRadius = 4
         layer?.borderColor = NSColor.separatorColor.cgColor
         layer?.borderWidth = 1
@@ -78,16 +78,16 @@ class HistoryChartView: NSView {
     }
     
     private func drawChart() {
-        guard !history.isEmpty else { return }
+        guard history.count > 1 else { return }
         
         let width = bounds.width
         let height = bounds.height
-        let stepX = width / CGFloat(maxDataPoints - 1)
+        // Adjust stepX to be based on current data, not max
+        let stepX = width / CGFloat(history.count - 1)
         
         var points: [NSPoint] = []
         for (index, value) in history.enumerated() {
-            let stepsFromRight = CGFloat(history.count - 1 - index)
-            let x = width - (stepsFromRight * stepX)
+            let x = CGFloat(index) * stepX
             
             let clampedValue = max(0, min(100, value))
             let y = (CGFloat(clampedValue) / 100.0) * height
@@ -99,7 +99,7 @@ class HistoryChartView: NSView {
         
         // --- Draw Fill ---
         let fillPath = NSBezierPath()
-        fillPath.move(to: NSPoint(x: firstPoint.x, y: 0))
+        fillPath.move(to: NSPoint(x: 0, y: 0)) // Start at bottom-left
         fillPath.line(to: firstPoint)
         
         for p in points.dropFirst() {
@@ -109,7 +109,7 @@ class HistoryChartView: NSView {
         if let lastPoint = points.last {
              fillPath.line(to: NSPoint(x: lastPoint.x, y: 0))
         }
-        fillPath.close()
+        // No need to close, we are connecting to the bottom edge.
         
         chartFillColor.setFill()
         fillPath.fill()

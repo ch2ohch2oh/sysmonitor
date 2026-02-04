@@ -11,9 +11,8 @@ struct UsageMetrics {
     var diskTotalGB: Double
 }
 
-@MainActor
-class SystemUsage {
-    static let shared = SystemUsage()
+actor SystemUsage {
+    nonisolated static let shared = SystemUsage()
     
     // CPU State
     private var previousInfo = processor_info_array_t(bitPattern: 0)
@@ -23,13 +22,15 @@ class SystemUsage {
     
     init() {
         // Initialize CPU baseline
-        let _ = getCPU()
+        Task {
+            let _ = await getCPU()
+        }
     }
     
-    func currentUsage() -> UsageMetrics {
+    func currentUsage() async -> UsageMetrics {
         let (diskUsed, diskTotal) = getDisk()
         return UsageMetrics(
-            cpuUsage: getCPU(),
+            cpuUsage: await getCPU(),
             gpuUsage: getGPU(),
             memoryUsedGB: getMemory().used,
             memoryTotalGB: getMemory().total,
@@ -39,7 +40,12 @@ class SystemUsage {
     }
     
     // MARK: - CPU
-    private func getCPU() -> Double {
+    private func getCPU() async -> Double {
+        if let prevInfo = previousInfo {
+            let prevSize = Int(previousCount) * MemoryLayout<integer_t>.size
+            vm_deallocate(mach_task_self_, vm_address_t(bitPattern: prevInfo), vm_size_t(prevSize))
+        }
+        
         var count = mach_msg_type_number_t(0)
         var info = processor_info_array_t(bitPattern: 0)
         let host = mach_host_self()
@@ -48,6 +54,9 @@ class SystemUsage {
         let result = host_processor_info(host, PROCESSOR_CPU_LOAD_INFO, &count, &info, &msgCount)
         
         guard result == KERN_SUCCESS, let infoArray = info else {
+            // If it fails, clear previous so we don't leak it
+            previousInfo = nil
+            previousCount = 0
             return 0.0
         }
         
@@ -57,30 +66,20 @@ class SystemUsage {
         
         let numCPUs = Int(count) / Int(CPU_STATE_MAX)
         
-        // Safe pointer arithmetic
-        // info is UnsafeMutablePointer<integer_t> aka Int32
-        
         if let prevInfo = previousInfo {
-             for i in 0..<numCPUs {
-                 let offset = i * Int(CPU_STATE_MAX)
-                 let baseIndex = offset
-                 
-                 // Indices in CPU_STATE_* are:
-                 // USER, SYSTEM, IDLE, NICE
-                 
-                 let user = infoArray[baseIndex + Int(CPU_STATE_USER)] - prevInfo[baseIndex + Int(CPU_STATE_USER)]
-                 let system = infoArray[baseIndex + Int(CPU_STATE_SYSTEM)] - prevInfo[baseIndex + Int(CPU_STATE_SYSTEM)]
-                 let nice = infoArray[baseIndex + Int(CPU_STATE_NICE)] - prevInfo[baseIndex + Int(CPU_STATE_NICE)]
-                 let idle = infoArray[baseIndex + Int(CPU_STATE_IDLE)] - prevInfo[baseIndex + Int(CPU_STATE_IDLE)]
-                 
-                 totalUser += user + nice
-                 totalSystem += system
-                 totalIdle += idle
-             }
-             
-             // Deallocate previous
-             let prevSize = Int(previousCount) * MemoryLayout<integer_t>.size
-             vm_deallocate(mach_task_self_, vm_address_t(bitPattern: prevInfo), vm_size_t(prevSize))
+            for i in 0..<numCPUs {
+                let offset = i * Int(CPU_STATE_MAX)
+                let baseIndex = offset
+                
+                let user = infoArray[baseIndex + Int(CPU_STATE_USER)] - prevInfo[baseIndex + Int(CPU_STATE_USER)]
+                let system = infoArray[baseIndex + Int(CPU_STATE_SYSTEM)] - prevInfo[baseIndex + Int(CPU_STATE_SYSTEM)]
+                let nice = infoArray[baseIndex + Int(CPU_STATE_NICE)] - prevInfo[baseIndex + Int(CPU_STATE_NICE)]
+                let idle = infoArray[baseIndex + Int(CPU_STATE_IDLE)] - prevInfo[baseIndex + Int(CPU_STATE_IDLE)]
+                
+                totalUser += user + nice
+                totalSystem += system
+                totalIdle += idle
+            }
         }
         
         // Update previous
@@ -90,7 +89,7 @@ class SystemUsage {
         let total = totalSystem + totalUser + totalIdle
         if total == 0 { return 0.0 }
         
-    return Double(totalSystem + totalUser) / Double(total) * 100.0
+        return Double(totalSystem + totalUser) / Double(total) * 100.0
     }
     
     // MARK: - GPU

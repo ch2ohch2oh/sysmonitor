@@ -86,32 +86,26 @@ class StatusBarController {
     }
     
     private func updateMetrics() {
-        let metrics = SystemUsage.shared.currentUsage()
-        
-        // Memory as Percentage: 
-        let memPercent = Int((metrics.memoryUsedGB / metrics.memoryTotalGB) * 100)
-        
-        // C:%2d%% -> 2 digits usually sufficient (0-99). 100% will shift slightly but rare.
-        let cpuText = pad(Int(metrics.cpuUsage), width: 2)
-        let memText = pad(memPercent, width: 2)
-        
-        // Only CPU and Memory
-        let text = "CPU:\(cpuText)% RAM:\(memText)%"
-        
-        if let button = self.statusItem.button {
-            // Use monospacedDigitSystemFont for compact but stable numbers.
-            button.font = NSFont.monospacedDigitSystemFont(ofSize: 12, weight: .regular)
-            button.title = text
+        Task {
+            let metrics = await SystemUsage.shared.currentUsage()
+            
+            // Memory as Percentage:
+            let memPercent = Int((metrics.memoryUsedGB / metrics.memoryTotalGB) * 100)
+            
+            // C:%2d%% -> 2 digits usually sufficient (0-99). 100% will shift slightly but rare.
+            let cpuText = String(format: "%2d", Int(metrics.cpuUsage))
+            let memText = String(format: "%2d", memPercent)
+            
+            // Only CPU and Memory
+            let text = "CPU:\(cpuText)% RAM:\(memText)%"
+            
+            await MainActor.run {
+                if let button = self.statusItem.button {
+                    // Use monospacedDigitSystemFont for compact but stable numbers.
+                    button.font = NSFont.monospacedDigitSystemFont(ofSize: 12, weight: .regular)
+                    button.title = text
+                }
+            }
         }
-
-    }
-    
-    private func pad(_ number: Int, width: Int) -> String {
-        let s = String(number)
-        if s.count < width {
-            // U+2007 is Figure Space (width of a digit)
-            return String(repeating: "\u{2007}", count: width - s.count) + s
-        }
-        return s
     }
 }

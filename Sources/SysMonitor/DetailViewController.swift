@@ -70,7 +70,7 @@ class DetailViewController: NSViewController {
         
         // Fix transparency
         view.wantsLayer = true
-        view.layer?.backgroundColor = NSColor.white.cgColor
+        view.layer?.backgroundColor = NSColor.windowBackgroundColor.cgColor
         
         setupUI()
         setupStyling()
@@ -191,28 +191,32 @@ class DetailViewController: NSViewController {
     }
     
     private func updateMetrics() {
-        let metrics = SystemUsage.shared.currentUsage()
-        
-        // CPU
-        cpuValueLabel.stringValue = String(format: "%.0f%%", metrics.cpuUsage)
-        
-        // Update History
-        cpuHistoryChart.addValue(metrics.cpuUsage)
-        
-        // GPU
-        gpuValueLabel.stringValue = String(format: "%.0f%%", metrics.gpuUsage)
-        gpuHistoryChart.addValue(metrics.gpuUsage)
-        
-        // Memory
-        let memPercent = (metrics.memoryUsedGB / metrics.memoryTotalGB) * 100.0
-        memoryValueLabel.stringValue = String(format: "%.1f/%.1f GB", metrics.memoryUsedGB, metrics.memoryTotalGB)
-        memoryHistoryChart.addValue(memPercent)
-        
-        // Disk
-        diskLevel.maxValue = metrics.diskTotalGB
-        diskLevel.doubleValue = metrics.diskUsedGB
-        
-        diskValueLabel.stringValue = String(format: "%.0f/%.0f GB", metrics.diskUsedGB, metrics.diskTotalGB)
+        Task {
+            let metrics = await SystemUsage.shared.currentUsage()
+            
+            await MainActor.run {
+                // CPU
+                cpuValueLabel.stringValue = String(format: "%.0f%%", metrics.cpuUsage)
+                
+                // Update History
+                cpuHistoryChart.addValue(metrics.cpuUsage)
+                
+                // GPU
+                gpuValueLabel.stringValue = String(format: "%.0f%%", metrics.gpuUsage)
+                gpuHistoryChart.addValue(metrics.gpuUsage)
+                
+                // Memory
+                let memPercent = (metrics.memoryUsedGB / metrics.memoryTotalGB) * 100.0
+                memoryValueLabel.stringValue = String(format: "%.1f/%.1f GB", metrics.memoryUsedGB, metrics.memoryTotalGB)
+                memoryHistoryChart.addValue(memPercent)
+                
+                // Disk
+                diskLevel.maxValue = metrics.diskTotalGB
+                diskLevel.doubleValue = metrics.diskUsedGB
+                
+                diskValueLabel.stringValue = String(format: "%.0f/%.0f GB", metrics.diskUsedGB, metrics.diskTotalGB)
+            }
+        }
     }
     
 
