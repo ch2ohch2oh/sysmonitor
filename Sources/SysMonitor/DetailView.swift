@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct DetailView: View {
-    @StateObject var viewModel = SystemUsageViewModel()
+    @ObservedObject var viewModel: SystemUsageViewModel
     
     var body: some View {
         VStack(spacing: 12) {
@@ -81,12 +81,6 @@ struct DetailView: View {
         }
         .padding(16)
         .frame(width: 220)
-        .onAppear {
-            viewModel.startTimer()
-        }
-        .onDisappear {
-            viewModel.stopTimer()
-        }
         .background(Color(NSColor.windowBackgroundColor))
     }
 }

@@ -1,24 +1,24 @@
 import Cocoa
 import SwiftUI
+import Combine
 
 @MainActor
 class StatusBarController {
     private var statusBar: NSStatusBar
     private var statusItem: NSStatusItem
     private var popover: NSPopover
-    private var timer: Timer?
     private var popoverViewController: NSHostingController<DetailView>
     
-    // We keep a separate viewModel for the status bar text to avoid overhead? 
-    // Or we can just reuse the SystemUsage logic locally or share.
-    // For simplicity, let's keep the existing local update logic for the button title for now, 
-    // as DetailView has its own ViewModel.
+    // Shared ViewModel
+    private var viewModel = SystemUsageViewModel()
+    private var cancellables = Set<AnyCancellable>()
     
     init() {
         statusBar = NSStatusBar.system
         statusItem = statusBar.statusItem(withLength: NSStatusItem.variableLength)
         
-        let detailView = DetailView()
+        // Pass shared viewModel to DetailView
+        let detailView = DetailView(viewModel: viewModel)
         popoverViewController = NSHostingController(rootView: detailView)
         
         popover = NSPopover()
@@ -33,7 +33,32 @@ class StatusBarController {
             button.sendAction(on: [.leftMouseUp, .rightMouseUp])
         }
         
-        startTimer()
+        // Subscribe to metrics updates
+        viewModel.$metrics
+            .sink { [weak self] metrics in
+                self?.updateStatusBar(with: metrics)
+            }
+            .store(in: &cancellables)
+            
+        // Make sure timer is running (ViewModel starts it on init, but good to be explicit/aware)
+        // viewModel.startTimer() // It's already started in init
+    }
+    
+    private func updateStatusBar(with metrics: UsageMetrics) {
+        // Memory as Percentage:
+        let memPercent = metrics.memoryTotalGB > 0 ? Int((metrics.memoryUsedGB / metrics.memoryTotalGB) * 100) : 0
+        
+        // C:%2d%% -> 2 digits usually sufficient (0-99). 100% will shift slightly but rare.
+        let cpuText = String(format: "%2d", Int(metrics.cpuUsage))
+        let memText = String(format: "%2d", memPercent)
+        
+        // Only CPU and Memory
+        let text = "CPU:\(cpuText)% RAM:\(memText)%"
+        
+        if let button = self.statusItem.button {
+            button.font = NSFont.monospacedDigitSystemFont(ofSize: 12, weight: .regular)
+            button.title = text
+        }
     }
     
     @objc func togglePopover(_ sender: AnyObject?) {
@@ -83,41 +108,5 @@ class StatusBarController {
         alert.alertStyle = .informational
         alert.addButton(withTitle: "OK")
         alert.runModal()
-    }
-    
-    func startTimer() {
-        timer?.invalidate()
-        
-        updateMetrics() // Fire once immediately
-        
-        timer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { [weak self] _ in
-            Task { @MainActor in
-                self?.updateMetrics()
-            }
-        }
-    }
-    
-    private func updateMetrics() {
-        Task {
-            let metrics = await SystemUsage.shared.currentUsage()
-            
-            // Memory as Percentage:
-            let memPercent = metrics.memoryTotalGB > 0 ? Int((metrics.memoryUsedGB / metrics.memoryTotalGB) * 100) : 0
-            
-            // C:%2d%% -> 2 digits usually sufficient (0-99). 100% will shift slightly but rare.
-            let cpuText = String(format: "%2d", Int(metrics.cpuUsage))
-            let memText = String(format: "%2d", memPercent)
-            
-            // Only CPU and Memory
-            let text = "CPU:\(cpuText)% RAM:\(memText)%"
-            
-            await MainActor.run {
-                if let button = self.statusItem.button {
-                    // Use monospacedDigitSystemFont for compact but stable numbers.
-                    button.font = NSFont.monospacedDigitSystemFont(ofSize: 12, weight: .regular)
-                    button.title = text
-                }
-            }
-        }
     }
 }
