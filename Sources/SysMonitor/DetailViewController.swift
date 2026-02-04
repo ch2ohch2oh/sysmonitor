@@ -10,25 +10,26 @@ class DetailViewController: NSViewController {
     private let cpuIcon = NSImageView(image: NSImage(systemSymbolName: "cpu", accessibilityDescription: "CPU") ?? NSImage())
     private let cpuLabel = NSTextField(labelWithString: "CPU")
     private let cpuValueLabel = NSTextField(labelWithString: "-")
-    private let cpuLevel: NSLevelIndicator = {
-        let level = NSLevelIndicator()
-        level.maxValue = 100
-        level.warningValue = 80
-        level.criticalValue = 90
-        level.levelIndicatorStyle = .continuousCapacity
-        level.controlSize = .small
-        return level
+
+    
+    private let cpuHistoryChart: HistoryChartView = {
+        let view = HistoryChartView()
+        view.translatesAutoresizingMaskIntoConstraints = false
+        view.themeColor = .systemBlue
+        return view
     }()
+
     
     // Memory
     private let memoryIcon = NSImageView(image: NSImage(systemSymbolName: "memorychip", accessibilityDescription: "Memory") ?? NSImage())
     private let memoryLabel = NSTextField(labelWithString: "RAM")
     private let memoryValueLabel = NSTextField(labelWithString: "-")
-    private let memoryLevel: NSLevelIndicator = {
-        let level = NSLevelIndicator()
-        level.levelIndicatorStyle = .continuousCapacity
-        level.controlSize = .small
-        return level
+    
+    private let memoryHistoryChart: HistoryChartView = {
+        let view = HistoryChartView()
+        view.translatesAutoresizingMaskIntoConstraints = false
+        view.themeColor = .systemGreen
+        return view
     }()
     
     // Disk
@@ -95,20 +96,38 @@ class DetailViewController: NSViewController {
         // Add Rows
         
         // CPU
-        gridView.addRow(with: [cpuIcon, cpuLabel, cpuLevel, cpuValueLabel])
+        gridView.addRow(with: [cpuIcon, cpuLabel, cpuValueLabel])
+        
+        // CPU History Chart Row
+        // We add it as a new row, and we'll merge cells later or effectively just add it
+        let chartRow = gridView.addRow(with: [cpuHistoryChart])
+        chartRow.mergeCells(in: NSRange(location: 0, length: 3))
+        
+        // Height constraint for the chart
+        cpuHistoryChart.heightAnchor.constraint(equalToConstant: 40).isActive = true
         
         // Memory
-        gridView.addRow(with: [memoryIcon, memoryLabel, memoryLevel, memoryValueLabel])
+        gridView.addRow(with: [memoryIcon, memoryLabel, memoryValueLabel])
+        
+        // Memory History Chart Row
+        let memChartRow = gridView.addRow(with: [memoryHistoryChart])
+        memChartRow.mergeCells(in: NSRange(location: 0, length: 3))
+        memoryHistoryChart.heightAnchor.constraint(equalToConstant: 40).isActive = true
         
         // Disk
-        gridView.addRow(with: [diskIcon, diskLabel, diskLevel, diskValueLabel])
+        // Group Level and Value into a single StackView to align with a 3-column grid
+        let diskStack = NSStackView(views: [diskLevel, diskValueLabel])
+        diskStack.orientation = .horizontal
+        diskStack.spacing = 4
+        diskStack.alignment = .centerY
         
-
+        gridView.addRow(with: [diskIcon, diskLabel, diskStack])
+        
         
         // Stabilize Column Widths
         gridView.column(at: 0).width = 18
         gridView.column(at: 1).width = 36
-        gridView.column(at: 2).width = 80
+        // gridView.column(at: 2).width = 80 // Removed to allow left alignment of values in this column to sit near label
         // gridView.column(at: 3).width = 70 // Removed to allow disk stack to expand
     }
     
@@ -134,12 +153,15 @@ class DetailViewController: NSViewController {
         }
         
         // Level Indicators
-        cpuLevel.widthAnchor.constraint(equalToConstant: 80).isActive = true
-        memoryLevel.widthAnchor.constraint(equalToConstant: 80).isActive = true
         diskLevel.widthAnchor.constraint(equalToConstant: 80).isActive = true
         
-        // Align Disk Label
+        // Align Labels
         diskLabel.alignment = .left 
+        
+        // Align Values
+        cpuValueLabel.alignment = .left
+        memoryValueLabel.alignment = .left
+        diskValueLabel.alignment = .left
     }
     
     private func startTimer() {
@@ -155,13 +177,15 @@ class DetailViewController: NSViewController {
         let metrics = SystemUsage.shared.currentUsage()
         
         // CPU
-        cpuLevel.doubleValue = metrics.cpuUsage
         cpuValueLabel.stringValue = String(format: "%.0f%%", metrics.cpuUsage)
         
+        // Update History
+        cpuHistoryChart.addValue(metrics.cpuUsage)
+        
         // Memory
-        memoryLevel.maxValue = metrics.memoryTotalGB
-        memoryLevel.doubleValue = metrics.memoryUsedGB
+        let memPercent = (metrics.memoryUsedGB / metrics.memoryTotalGB) * 100.0
         memoryValueLabel.stringValue = String(format: "%.1f/%.1f GB", metrics.memoryUsedGB, metrics.memoryTotalGB)
+        memoryHistoryChart.addValue(memPercent)
         
         // Disk
         diskLevel.maxValue = metrics.diskTotalGB
