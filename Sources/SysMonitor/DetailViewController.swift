@@ -189,7 +189,7 @@ class DetailViewController: NSViewController {
         diskLevel.maxValue = metrics.diskTotalGB
         diskLevel.doubleValue = metrics.diskUsedGB
         
-        diskValueLabel.stringValue = String(format: "%.0f/%.0f GB", metrics.diskTotalGB - metrics.diskUsedGB, metrics.diskTotalGB)
+        diskValueLabel.stringValue = String(format: "%.0f/%.0f GB", metrics.diskUsedGB, metrics.diskTotalGB)
     }
     
 
