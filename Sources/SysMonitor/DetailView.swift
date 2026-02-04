@@ -37,7 +37,11 @@ struct DetailView: View {
             if showPerCore {
                 LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 4), count: 4), spacing: 4) {
                     ForEach(0..<viewModel.perCoreHistory.count, id: \.self) { index in
-                        HistoryView(history: viewModel.perCoreHistory[index], color: .blue)
+                        // Assumption: E-Cores are first, then P-Cores
+                        let isECore = index < viewModel.metrics.eCoreCount
+                        let color: Color = isECore ? .green : .blue
+                        
+                        HistoryView(history: viewModel.perCoreHistory[index], color: color)
                             .frame(height: 25)
                     }
                 }

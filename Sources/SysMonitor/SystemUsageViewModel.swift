@@ -3,7 +3,7 @@ import Combine
 
 @MainActor
 class SystemUsageViewModel: ObservableObject {
-    @Published var metrics: UsageMetrics = UsageMetrics(cpuUsage: 0, perCoreUsage: [], gpuUsage: 0, memoryUsedGB: 0, memoryTotalGB: 0, diskUsedGB: 0, diskTotalGB: 0)
+    @Published var metrics: UsageMetrics = UsageMetrics(cpuUsage: 0, perCoreUsage: [], eCoreCount: 0, pCoreCount: 0, gpuUsage: 0, memoryUsedGB: 0, memoryTotalGB: 0, diskUsedGB: 0, diskTotalGB: 0)
     
     // History Data for Charts
     @Published var cpuHistory: [Double]

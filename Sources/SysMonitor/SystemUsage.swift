@@ -5,6 +5,8 @@ import IOKit
 struct UsageMetrics {
     var cpuUsage: Double
     var perCoreUsage: [Double]
+    var eCoreCount: Int
+    var pCoreCount: Int
     var gpuUsage: Double
     var memoryUsedGB: Double
     var memoryTotalGB: Double
@@ -18,11 +20,14 @@ actor SystemUsage {
     // CPU State
     private var previousInfo = processor_info_array_t(bitPattern: 0)
     private var previousCount = mach_msg_type_number_t(0)
-    
-
+    private var pCoreCount: Int = 0
+    private var eCoreCount: Int = 0
     
     init() {
         // Initialize CPU baseline
+        pCoreCount = SystemUsage.getSysctlInt("hw.perflevel0.logicalcpu")
+        eCoreCount = SystemUsage.getSysctlInt("hw.perflevel1.logicalcpu")
+        
         Task {
             let _ = await getCPU()
         }
@@ -34,12 +39,22 @@ actor SystemUsage {
         return UsageMetrics(
             cpuUsage: cpu,
             perCoreUsage: perCore,
+            eCoreCount: eCoreCount,
+            pCoreCount: pCoreCount,
             gpuUsage: getGPU(),
             memoryUsedGB: getMemory().used,
             memoryTotalGB: getMemory().total,
             diskUsedGB: diskUsed,
             diskTotalGB: diskTotal
         )
+    }
+    
+    private static func getSysctlInt(_ name: String) -> Int {
+        var size: Int = 0
+        sysctlbyname(name, nil, &size, nil, 0)
+        var value: Int32 = 0
+        sysctlbyname(name, &value, &size, nil, 0)
+        return Int(value)
     }
     
     // MARK: - CPU
