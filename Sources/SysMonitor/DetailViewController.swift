@@ -115,13 +115,10 @@ class DetailViewController: NSViewController {
         memoryHistoryChart.heightAnchor.constraint(equalToConstant: 40).isActive = true
         
         // Disk
-        // Group Level and Value into a single StackView to align with a 3-column grid
-        let diskStack = NSStackView(views: [diskLevel, diskValueLabel])
-        diskStack.orientation = .horizontal
-        diskStack.spacing = 4
-        diskStack.alignment = .centerY
+        gridView.addRow(with: [diskIcon, diskLabel, diskValueLabel])
         
-        gridView.addRow(with: [diskIcon, diskLabel, diskStack])
+        let diskLevelRow = gridView.addRow(with: [diskLevel])
+        diskLevelRow.mergeCells(in: NSRange(location: 0, length: 3))
         
         
         // Stabilize Column Widths
@@ -153,7 +150,8 @@ class DetailViewController: NSViewController {
         }
         
         // Level Indicators
-        diskLevel.widthAnchor.constraint(equalToConstant: 80).isActive = true
+        // Level Indicators
+        // diskLevel.widthAnchor.constraint(equalToConstant: 80).isActive = true
         
         // Align Labels
         diskLabel.alignment = .left 
@@ -191,7 +189,7 @@ class DetailViewController: NSViewController {
         diskLevel.maxValue = metrics.diskTotalGB
         diskLevel.doubleValue = metrics.diskUsedGB
         
-        diskValueLabel.stringValue = String(format: "%.0f/%.0f GB", metrics.diskUsedGB, metrics.diskTotalGB)
+        diskValueLabel.stringValue = String(format: "%.0f/%.0f GB", metrics.diskTotalGB - metrics.diskUsedGB, metrics.diskTotalGB)
     }
     
 
