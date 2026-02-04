@@ -110,6 +110,7 @@ struct DetailView: View {
         }
         .padding(16)
         .frame(width: 220)
-        .background(Color(NSColor.windowBackgroundColor))
+        .background(VisualEffectView(material: .popover, blendingMode: .behindWindow))
+        .clipShape(RoundedRectangle(cornerRadius: 12))
     }
 }
