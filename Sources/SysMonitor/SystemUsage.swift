@@ -18,18 +18,32 @@ actor SystemUsage {
     private var previousInfo = processor_info_array_t(bitPattern: 0)
     private var previousCount = mach_msg_type_number_t(0)
     
-
+    private(set) var metrics = UsageMetrics(cpuUsage: 0, gpuUsage: 0, memoryUsedGB: 0, memoryTotalGB: 0, diskUsedGB: 0, diskTotalGB: 0)
     
-    init() {
+    private var timer: Timer?
+    
+    init() {}
+    
+    func start() {
         // Initialize CPU baseline
         Task {
-            let _ = await getCPU()
+            await updateMetrics()
+        }
+        
+        timer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
+            Task { [weak self] in
+                await self?.updateMetrics()
+            }
         }
     }
     
-    func currentUsage() async -> UsageMetrics {
+    func stop() {
+        timer?.invalidate()
+    }
+    
+    private func updateMetrics() async {
         let (diskUsed, diskTotal) = getDisk()
-        return UsageMetrics(
+        metrics = UsageMetrics(
             cpuUsage: await getCPU(),
             gpuUsage: getGPU(),
             memoryUsedGB: getMemory().used,
