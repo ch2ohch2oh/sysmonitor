@@ -36,6 +36,9 @@ class HistoryChartView: NSView {
         layer?.cornerRadius = 4
         layer?.borderColor = NSColor.separatorColor.cgColor
         layer?.borderWidth = 1
+        
+        // Pre-fill with empty data
+        history = [Double](repeating: 0, count: maxDataPoints)
     }
     
     func addValue(_ value: Double) {
@@ -78,12 +81,11 @@ class HistoryChartView: NSView {
     }
     
     private func drawChart() {
-        guard history.count > 1 else { return }
+        guard !history.isEmpty else { return }
         
         let width = bounds.width
         let height = bounds.height
-        // Adjust stepX to be based on current data, not max
-        let stepX = width / CGFloat(history.count - 1)
+        let stepX = width / CGFloat(maxDataPoints - 1)
         
         var points: [NSPoint] = []
         for (index, value) in history.enumerated() {

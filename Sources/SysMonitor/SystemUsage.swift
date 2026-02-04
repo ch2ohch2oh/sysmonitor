@@ -41,11 +41,6 @@ actor SystemUsage {
     
     // MARK: - CPU
     private func getCPU() async -> Double {
-        if let prevInfo = previousInfo {
-            let prevSize = Int(previousCount) * MemoryLayout<integer_t>.size
-            vm_deallocate(mach_task_self_, vm_address_t(bitPattern: prevInfo), vm_size_t(prevSize))
-        }
-        
         var count = mach_msg_type_number_t(0)
         var info = processor_info_array_t(bitPattern: 0)
         let host = mach_host_self()
@@ -54,9 +49,6 @@ actor SystemUsage {
         let result = host_processor_info(host, PROCESSOR_CPU_LOAD_INFO, &count, &info, &msgCount)
         
         guard result == KERN_SUCCESS, let infoArray = info else {
-            // If it fails, clear previous so we don't leak it
-            previousInfo = nil
-            previousCount = 0
             return 0.0
         }
         
@@ -80,6 +72,9 @@ actor SystemUsage {
                 totalSystem += system
                 totalIdle += idle
             }
+            
+            let prevSize = Int(previousCount) * MemoryLayout<integer_t>.size
+            vm_deallocate(mach_task_self_, vm_address_t(bitPattern: prevInfo), vm_size_t(prevSize))
         }
         
         // Update previous
