@@ -19,6 +19,18 @@ class DetailViewController: NSViewController {
         return view
     }()
 
+    // GPU
+    private let gpuIcon = NSImageView(image: NSImage(systemSymbolName: "cpu.fill", accessibilityDescription: "GPU") ?? NSImage())
+    private let gpuLabel = NSTextField(labelWithString: "GPU")
+    private let gpuValueLabel = NSTextField(labelWithString: "-")
+    
+    private let gpuHistoryChart: HistoryChartView = {
+        let view = HistoryChartView()
+        view.translatesAutoresizingMaskIntoConstraints = false
+        view.themeColor = .systemPurple
+        return view
+    }()
+
     
     // Memory
     private let memoryIcon = NSImageView(image: NSImage(systemSymbolName: "memorychip", accessibilityDescription: "Memory") ?? NSImage())
@@ -106,6 +118,12 @@ class DetailViewController: NSViewController {
         // Height constraint for the chart
         cpuHistoryChart.heightAnchor.constraint(equalToConstant: 40).isActive = true
         
+        // GPU
+        gridView.addRow(with: [gpuIcon, gpuLabel, gpuValueLabel])
+        let gpuChartRow = gridView.addRow(with: [gpuHistoryChart])
+        gpuChartRow.mergeCells(in: NSRange(location: 0, length: 3))
+        gpuHistoryChart.heightAnchor.constraint(equalToConstant: 40).isActive = true
+        
         // Memory
         gridView.addRow(with: [memoryIcon, memoryLabel, memoryValueLabel])
         
@@ -133,8 +151,8 @@ class DetailViewController: NSViewController {
         let font = NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .regular)
         
         let allLabels = [
-            cpuLabel, memoryLabel, diskLabel,
-            cpuValueLabel, memoryValueLabel, diskValueLabel
+            cpuLabel, gpuLabel, memoryLabel, diskLabel,
+            cpuValueLabel, gpuValueLabel, memoryValueLabel, diskValueLabel
         ]
         
         for label in allLabels {
@@ -143,7 +161,7 @@ class DetailViewController: NSViewController {
         }
         
         // Icons tint
-        let icons = [cpuIcon, memoryIcon, diskIcon]
+        let icons = [cpuIcon, gpuIcon, memoryIcon, diskIcon]
         for icon in icons {
             icon.contentTintColor = .labelColor
             icon.symbolConfiguration = .init(scale: .small)
@@ -158,6 +176,7 @@ class DetailViewController: NSViewController {
         
         // Align Values
         cpuValueLabel.alignment = .left
+        gpuValueLabel.alignment = .left
         memoryValueLabel.alignment = .left
         diskValueLabel.alignment = .left
     }
@@ -179,6 +198,10 @@ class DetailViewController: NSViewController {
         
         // Update History
         cpuHistoryChart.addValue(metrics.cpuUsage)
+        
+        // GPU
+        gpuValueLabel.stringValue = String(format: "%.0f%%", metrics.gpuUsage)
+        gpuHistoryChart.addValue(metrics.gpuUsage)
         
         // Memory
         let memPercent = (metrics.memoryUsedGB / metrics.memoryTotalGB) * 100.0

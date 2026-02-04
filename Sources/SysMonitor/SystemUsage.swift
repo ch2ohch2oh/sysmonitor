@@ -4,6 +4,7 @@ import IOKit
 
 struct UsageMetrics {
     var cpuUsage: Double
+    var gpuUsage: Double
     var memoryUsedGB: Double
     var memoryTotalGB: Double
     var diskUsedGB: Double
@@ -29,6 +30,7 @@ class SystemUsage {
         let (diskUsed, diskTotal) = getDisk()
         return UsageMetrics(
             cpuUsage: getCPU(),
+            gpuUsage: getGPU(),
             memoryUsedGB: getMemory().used,
             memoryTotalGB: getMemory().total,
             diskUsedGB: diskUsed,
@@ -88,9 +90,43 @@ class SystemUsage {
         let total = totalSystem + totalUser + totalIdle
         if total == 0 { return 0.0 }
         
-        return Double(totalSystem + totalUser) / Double(total) * 100.0
+    return Double(totalSystem + totalUser) / Double(total) * 100.0
     }
     
+    // MARK: - GPU
+    private func getGPU() -> Double {
+        var utilization: Double = 0.0
+        var iterator: io_iterator_t = 0
+        let result = IOServiceGetMatchingServices(kIOMainPortDefault, IOServiceMatching("IOAccelerator"), &iterator)
+        
+        if result == KERN_SUCCESS {
+            var service: io_registry_entry_t = IOIteratorNext(iterator)
+            var count = 0
+            while service != 0 {
+                if let stats = IORegistryEntryCreateCFProperty(service, "PerformanceStatistics" as CFString, kCFAllocatorDefault, 0)?.takeRetainedValue() as? [String: Any] {
+                    // Try different possible keys for GPU utilization
+                    if let util = stats["Device Utilization %"] as? Int {
+                        utilization += Double(util)
+                        count += 1
+                    } else if let util = stats["GPU Activity(%)"] as? Int {
+                        utilization += Double(util)
+                        count += 1
+                    } else if let util = stats["Utilization %"] as? Int {
+                        utilization += Double(util)
+                        count += 1
+                    }
+                }
+                IOObjectRelease(service)
+                service = IOIteratorNext(iterator)
+            }
+            IOObjectRelease(iterator)
+            
+            if count > 0 {
+                return utilization / Double(count)
+            }
+        }
+        return 0.0
+    }
     // MARK: - Memory
     private func getMemory() -> (used: Double, total: Double) {
         var size = mach_msg_type_number_t(MemoryLayout<vm_statistics64_data_t>.size / MemoryLayout<integer_t>.size)
