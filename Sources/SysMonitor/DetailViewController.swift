@@ -210,7 +210,10 @@ class DetailViewController: NSViewController {
                 gpuHistoryChart.addValue(metrics.gpuUsage)
                 
                 // Memory
-                let memPercent = (metrics.memoryUsedGB / metrics.memoryTotalGB) * 100.0
+                var memPercent = 0.0
+                if metrics.memoryTotalGB > 0 {
+                    memPercent = (metrics.memoryUsedGB / metrics.memoryTotalGB) * 100.0
+                }
                 memoryValueLabel.stringValue = String(format: "%.1f/%.1f GB", metrics.memoryUsedGB, metrics.memoryTotalGB)
                 memoryHistoryChart.addValue(memPercent)
                 
