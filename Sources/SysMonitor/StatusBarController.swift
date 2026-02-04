@@ -1,4 +1,5 @@
 import Cocoa
+import SwiftUI
 
 @MainActor
 class StatusBarController {
@@ -6,17 +7,23 @@ class StatusBarController {
     private var statusItem: NSStatusItem
     private var popover: NSPopover
     private var timer: Timer?
-    private var detailViewController: DetailViewController // Strong reference
+    private var popoverViewController: NSHostingController<DetailView>
+    
+    // We keep a separate viewModel for the status bar text to avoid overhead? 
+    // Or we can just reuse the SystemUsage logic locally or share.
+    // For simplicity, let's keep the existing local update logic for the button title for now, 
+    // as DetailView has its own ViewModel.
     
     init() {
         statusBar = NSStatusBar.system
         statusItem = statusBar.statusItem(withLength: NSStatusItem.variableLength)
         
-        detailViewController = DetailViewController()
+        let detailView = DetailView()
+        popoverViewController = NSHostingController(rootView: detailView)
         
         popover = NSPopover()
-        popover.contentViewController = detailViewController
-        popover.behavior = .applicationDefined // Changed from .transient
+        popover.contentViewController = popoverViewController
+        popover.behavior = .applicationDefined 
         
         if let button = statusItem.button {
             button.title = "Initializing..."
@@ -95,7 +102,7 @@ class StatusBarController {
             let metrics = await SystemUsage.shared.currentUsage()
             
             // Memory as Percentage:
-            let memPercent = Int((metrics.memoryUsedGB / metrics.memoryTotalGB) * 100)
+            let memPercent = metrics.memoryTotalGB > 0 ? Int((metrics.memoryUsedGB / metrics.memoryTotalGB) * 100) : 0
             
             // C:%2d%% -> 2 digits usually sufficient (0-99). 100% will shift slightly but rare.
             let cpuText = String(format: "%2d", Int(metrics.cpuUsage))
