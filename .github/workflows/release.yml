@@ -16,7 +16,11 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Build and Package
+        env:
+          VERSION: ${{ github.ref_name }}
         run: |
+          # Strip 'v' prefix if present in github.ref_name for safety, though package.sh also handles it
+          export VERSION=${VERSION#v}
           chmod +x package.sh
           ./package.sh
 
