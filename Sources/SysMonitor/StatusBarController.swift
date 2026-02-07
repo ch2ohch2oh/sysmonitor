@@ -1,32 +1,90 @@
 import Cocoa
+import SwiftUI
+import Combine
 
 @MainActor
 class StatusBarController {
     private var statusBar: NSStatusBar
     private var statusItem: NSStatusItem
-    private var popover: NSPopover
-    private var timer: Timer?
+    private var window: NSPanel
+    private var eventMonitor: EventMonitor?
+    
+    // Shared ViewModel
+    private var viewModel = SystemUsageViewModel()
+    private var cancellables = Set<AnyCancellable>()
     
     init() {
         statusBar = NSStatusBar.system
-        statusItem = statusBar.statusItem(withLength: NSStatusItem.variableLength)
+        // Use fixed length to avoid popover moving around when text width changes
+        // Increased to 150 to prevent text wrapping/stacking
+        statusItem = statusBar.statusItem(withLength: 150)
         
-        popover = NSPopover()
-        popover.contentViewController = DetailViewController()
-        popover.behavior = .transient
+        // Setup Window (NSPanel)
+        // StyleMask .borderless removes the title bar and standard window frame => "No Arrow"
+        window = NSPanel(
+            contentRect: NSRect(x: 0, y: 0, width: 220, height: 300), // Height might vary, SwiftView will dictate
+            styleMask: [.borderless, .nonactivatingPanel],
+            backing: .buffered,
+            defer: false
+        )
+        window.level = .mainMenu
+        window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        window.backgroundColor = .clear
+        window.isOpaque = false
+        window.hasShadow = true
+        
+        // Pass shared viewModel to DetailView
+        let detailView = DetailView(viewModel: viewModel)
+        // Use NSHostingView directly for the window content
+        let hostingView = NSHostingView(rootView: detailView)
+        // hostingView.translatesAutoresizingMaskIntoConstraints = false 
+        // Autoresizing is simpler for fixed size content.
+        
+        window.contentView = hostingView
         
         if let button = statusItem.button {
             button.title = "Initializing..."
             button.font = NSFont.monospacedDigitSystemFont(ofSize: 12, weight: .regular)
-            button.action = #selector(togglePopover(_:))
+            button.action = #selector(toggleWindow(_:))
             button.target = self
             button.sendAction(on: [.leftMouseUp, .rightMouseUp])
         }
         
-        startTimer()
+        // Setup Event Monitor to detect clicks outside
+        eventMonitor = EventMonitor(mask: [.leftMouseDown, .rightMouseDown]) { [weak self] event in
+            if let strongSelf = self, strongSelf.window.isVisible {
+                strongSelf.hideWindow()
+            }
+        }
+        
+        // Subscribe to metrics updates
+        viewModel.$metrics
+            .sink { [weak self] metrics in
+                self?.updateStatusBar(with: metrics)
+            }
+            .store(in: &cancellables)
     }
     
-    @objc func togglePopover(_ sender: AnyObject?) {
+    private func updateStatusBar(with metrics: UsageMetrics) {
+        // Memory as Percentage:
+        let memPercent = metrics.memoryTotalGB > 0 ? Int((metrics.memoryUsedGB / metrics.memoryTotalGB) * 100) : 0
+        
+        // C:%3d%% -> 3 digits. Replace spaces with Figure Space (U+2007) to match digit width.
+        let figureSpace = "\u{2007}"
+        let cpuText = String(format: "%3d", Int(metrics.cpuUsage)).replacingOccurrences(of: " ", with: figureSpace)
+        let memText = String(format: "%3d", memPercent).replacingOccurrences(of: " ", with: figureSpace)
+        
+        // Only CPU and Memory
+        let text = "CPU:\(cpuText)% RAM:\(memText)%"
+        
+        if let button = self.statusItem.button {
+            // Use monospacedDigitSystemFont: letters are proportional, digits are fixed width.
+            button.font = NSFont.monospacedDigitSystemFont(ofSize: 12, weight: .regular)
+            button.title = text
+        }
+    }
+    
+    @objc func toggleWindow(_ sender: AnyObject?) {
         let event = NSApp.currentEvent
         
         if event?.type == .rightMouseUp {
@@ -37,20 +95,53 @@ class StatusBarController {
             menu.addItem(NSMenuItem.separator())
             menu.addItem(NSMenuItem(title: "Quit SysMonitor", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
             
-            // Pop up the menu at the cursor location or properly anchored to button
             if let button = statusItem.button {
                  menu.popUp(positioning: nil, at: NSPoint(x: 0, y: button.bounds.height), in: button)
             }
         } else {
-            if let button = statusItem.button {
-                if popover.isShown {
-                    popover.performClose(sender)
-                } else {
-                    NSApp.activate(ignoringOtherApps: true)
-                    popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
-                }
+            if window.isVisible {
+                hideWindow()
+            } else {
+                showWindow()
             }
         }
+    }
+    
+    private func showWindow() {
+        guard let button = statusItem.button else { return }
+        
+        // Calculate position
+        // Translate button coordinate to screen coordinates
+        // Note: 'button.window' is the status bar window.
+        let buttonRectInWindow = button.convert(button.bounds, to: nil)
+        let buttonRectInScreen = button.window?.convertToScreen(buttonRectInWindow) ?? .zero
+        
+        // Get content size. Wait, NSHostingView should size itself?
+        // We forced DetailView frame(width: 220).
+        // Let's ask the hosting view for its fitting size.
+        let contentSize = window.contentView?.fittingSize ?? CGSize(width: 220, height: 300)
+        
+        // Center X relative to button
+        let x = buttonRectInScreen.origin.x + (buttonRectInScreen.width / 2) - (contentSize.width / 2)
+        
+        // Align Y below button
+        // Screen Y is 0 at bottom. Button Y is top.
+        // buttonRectInScreen.origin.y is the bottom-left corner of the button in screen coords.
+        // We want the window top to be slightly below button bottom.
+        let y = buttonRectInScreen.origin.y - contentSize.height - 5 // 5px gap
+        
+        let frame = NSRect(x: x, y: y, width: contentSize.width, height: contentSize.height)
+        
+        window.setFrame(frame, display: true)
+        window.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+        
+        eventMonitor?.start()
+    }
+    
+    private func hideWindow() {
+        window.orderOut(nil)
+        eventMonitor?.stop()
     }
     
     @objc func showAbout(_ sender: AnyObject?) {
@@ -73,45 +164,5 @@ class StatusBarController {
         alert.alertStyle = .informational
         alert.addButton(withTitle: "OK")
         alert.runModal()
-    }
-    
-    func startTimer() {
-        timer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { [weak self] _ in
-            Task { @MainActor in
-                self?.updateMetrics()
-            }
-        }
-        // Fire immediately once
-        updateMetrics()
-    }
-    
-    private func updateMetrics() {
-        let metrics = SystemUsage.shared.currentUsage()
-        
-        // Memory as Percentage: 
-        let memPercent = Int((metrics.memoryUsedGB / metrics.memoryTotalGB) * 100)
-        
-        // C:%2d%% -> 2 digits usually sufficient (0-99). 100% will shift slightly but rare.
-        let cpuText = pad(Int(metrics.cpuUsage), width: 2)
-        let memText = pad(memPercent, width: 2)
-        
-        // Only CPU and Memory
-        let text = "CPU:\(cpuText)% RAM:\(memText)%"
-        
-        if let button = self.statusItem.button {
-            // Use monospacedDigitSystemFont for compact but stable numbers.
-            button.font = NSFont.monospacedDigitSystemFont(ofSize: 12, weight: .regular)
-            button.title = text
-        }
-
-    }
-    
-    private func pad(_ number: Int, width: Int) -> String {
-        let s = String(number)
-        if s.count < width {
-            // U+2007 is Figure Space (width of a digit)
-            return String(repeating: "\u{2007}", count: width - s.count) + s
-        }
-        return s
     }
 }
