@@ -15,9 +15,8 @@ class StatusBarController {
     
     init() {
         statusBar = NSStatusBar.system
-        // Use fixed length to avoid popover moving around when text width changes
-        // Increased to 150 to prevent text wrapping/stacking
-        statusItem = statusBar.statusItem(withLength: 150)
+        // Use variable length to avoid fixed padding
+        statusItem = statusBar.statusItem(withLength: NSStatusItem.variableLength)
         
         // Setup Window (NSPanel)
         // StyleMask .borderless removes the title bar and standard window frame => "No Arrow"
@@ -79,10 +78,11 @@ class StatusBarController {
     }
 
     private func updateStatusBarAsText(_ metrics: UsageMetrics) {
-        // Clear image if any
+        // Clear image and ensure no space is reserved for it
         if statusItem.button?.image != nil {
             statusItem.button?.image = nil
         }
+        statusItem.button?.imagePosition = .noImage
         
         // Memory as Percentage:
         let memPercent = metrics.memoryTotalGB > 0 ? Int((metrics.memoryUsedGB / metrics.memoryTotalGB) * 100) : 0
@@ -129,11 +129,6 @@ class StatusBarController {
     }
     
     private func drawChart(in rect: NSRect, history: [Double], color: NSColor, title: String, value: String) {
-        // Split rect: Text (35px) | Chart (Rest)
-        let textWidth: CGFloat = 35
-        let textRect = NSRect(x: rect.minX, y: rect.minY, width: textWidth, height: rect.height)
-        let chartRect = NSRect(x: rect.minX + textWidth, y: rect.minY, width: rect.width - textWidth, height: rect.height)
-        
         // Draw Text
         let paragraph = NSMutableParagraphStyle()
         paragraph.alignment = .right
@@ -150,18 +145,27 @@ class StatusBarController {
             .paragraphStyle: paragraph
         ]
         
-        // Draw Title (Top) - manually positioned
+        // Create attributed strings to measure size
         let titleStr = NSAttributedString(string: title, attributes: titleAttrs)
         let valStr = NSAttributedString(string: value, attributes: valAttrs)
+        
+        // Calculate text width dynamically based on actual content
+        let maxTextWidth = max(titleStr.size().width, valStr.size().width)
+        let textWidth = maxTextWidth + 2 // Add small padding
+        let gap: CGFloat = 1
+        
+        // Split rect: Text (dynamic) | Chart (Rest)
+        let textRect = NSRect(x: rect.minX, y: rect.minY, width: textWidth, height: rect.height)
+        let chartRect = NSRect(x: rect.minX + textWidth + gap, y: rect.minY, width: rect.width - textWidth - gap, height: rect.height)
         
         let totalHeight = titleStr.size().height + valStr.size().height      
         let startY = textRect.midY - (totalHeight / 2)
 
         // Draw Value (Bottom)
-        valStr.draw(at: NSPoint(x: textRect.maxX - valStr.size().width - 2, y: startY))
+        valStr.draw(at: NSPoint(x: textRect.maxX - valStr.size().width - 1, y: startY))
         
         // Draw Title (Top)
-        titleStr.draw(at: NSPoint(x: textRect.maxX - titleStr.size().width - 2, y: startY + valStr.size().height))
+        titleStr.draw(at: NSPoint(x: textRect.maxX - titleStr.size().width - 1, y: startY + valStr.size().height))
 
         guard !history.isEmpty else { return }
         
