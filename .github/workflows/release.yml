@@ -1,0 +1,33 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  build:
+    name: Build and Release
+    runs-on: macos-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Build and Package
+        run: |
+          chmod +x package.sh
+          ./package.sh
+
+      - name: Compress App
+        run: |
+          # Create zip with the app bundle
+          # Using zip -r to recursively compress
+          zip -r SysMonitor.zip SysMonitor.app
+
+      - name: Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: SysMonitor.zip
+          generate_release_notes: true
