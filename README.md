@@ -1,5 +1,7 @@
 # <img src="icon_source.png" width="48" align="center" /> SysMonitor
 
+**[View Landing Page](https://ch2ohch2oh.github.io/sysmonitor)**
+
 <div align="center">
   <img src="assets/minichart.png" width="300" alt="MiniChart" />
 </div>

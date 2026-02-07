@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SysMonitor - macOS System Monitor</title>
+    <meta name="description" content="Lightweight menu-bar system monitor for macOS. Track CPU, RAM, and disk usage.">
+    <link rel="icon" type="image/png" href="assets/icon_source.png">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <main class="container">
+        <header class="header">
+            <img src="assets/icon_source.png" alt="SysMonitor" class="icon">
+            <h1>SysMonitor</h1>
+            <p class="subtitle">Lightweight system monitoring for macOS</p>
+        </header>
+
+        <section class="screenshot">
+            <img src="assets/minichart.png" alt="SysMonitor in action">
+        </section>
+
+        <section class="features">
+            <div class="feature">
+                <h3>CPU & RAM</h3>
+                <p>Real-time usage in your menu bar</p>
+            </div>
+            <div class="feature">
+                <h3>Mini charts</h3>
+                <p>Optional visual mode with history</p>
+            </div>
+            <div class="feature">
+                <h3>Details on click</h3>
+                <p>Disk usage and per-core CPU stats</p>
+            </div>
+        </section>
+
+        <section class="download">
+            <a href="#" class="btn" id="download-btn">Download</a>
+            <p class="version"><span id="latest-version">...</span></p>
+        </section>
+
+        <section class="install">
+            <h2>Installation</h2>
+            <ol>
+                <li>Download and unzip</li>
+                <li>Drag to Applications</li>
+                <li>Right-click → Open (first time only)</li>
+            </ol>
+        </section>
+
+        <footer class="footer">
+            <a href="https://github.com/ch2ohch2oh/sysmonitor">GitHub</a>
+        </footer>
+    </main>
+
+    <script src="script.js"></script>
+</body>
+</html>
