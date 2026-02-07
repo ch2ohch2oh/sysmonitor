@@ -11,16 +11,22 @@ struct SettingsView: View {
     @AppStorage("statusBarDisplayMode") private var displayMode: DisplayMode = .text
     
     var body: some View {
-        Form {
-            Picker("Status bar style:", selection: $displayMode) {
-                ForEach(DisplayMode.allCases) { mode in
-                    Text(mode.rawValue).tag(mode)
+        Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 12) {
+            GridRow {
+                Text("Status Bar Display")
+                    .gridColumnAlignment(.trailing)
+                
+                Picker("", selection: $displayMode) {
+                    ForEach(DisplayMode.allCases) { mode in
+                        Text(mode.rawValue).tag(mode)
+                    }
                 }
+                .pickerStyle(SegmentedPickerStyle())
+                .labelsHidden()
             }
-            .pickerStyle(SegmentedPickerStyle())
         }
-        .padding()
-        .frame(width: 300, height: 80)
+        .padding(16)
+        .frame(width: 320, height: 80)
     }
 }
 
