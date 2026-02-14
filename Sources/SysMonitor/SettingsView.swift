@@ -10,6 +10,8 @@ enum DisplayMode: String, CaseIterable, Identifiable {
 struct SettingsView: View {
     @AppStorage("statusBarDisplayMode") private var displayMode: DisplayMode = .text
     
+    @StateObject private var autostart = Autostart.shared
+    
     var body: some View {
         Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 12) {
             GridRow {
@@ -24,9 +26,22 @@ struct SettingsView: View {
                 .pickerStyle(SegmentedPickerStyle())
                 .labelsHidden()
             }
+            
+            GridRow {
+                Text("Start at Login")
+                    .gridColumnAlignment(.trailing)
+                
+                Toggle("", isOn: Binding(
+                    get: { autostart.isEnabled },
+                    set: { autostart.toggle(enabled: $0) }
+                ))
+                .toggleStyle(.switch)
+                .labelsHidden()
+            }
         }
         .padding(16)
-        .frame(width: 320, height: 80)
+        .frame(width: 320)
+        .fixedSize()
     }
 }
 
