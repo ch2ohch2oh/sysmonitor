@@ -195,7 +195,7 @@ class StatusBarController {
         
         if event?.type == .rightMouseUp {
             let menu = NSMenu()
-            let aboutItem = NSMenuItem(title: "About SysMonitor", action: #selector(showAbout(_:)), keyEquivalent: "")
+            let aboutItem = NSMenuItem(title: "About", action: #selector(showAbout(_:)), keyEquivalent: "")
             aboutItem.target = self
             menu.addItem(aboutItem)
             
@@ -204,7 +204,7 @@ class StatusBarController {
             menu.addItem(settingsItem)
             
             menu.addItem(NSMenuItem.separator())
-            menu.addItem(NSMenuItem(title: "Quit SysMonitor", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
+            menu.addItem(NSMenuItem(title: "Quit", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
             
             if let button = statusItem.button {
                  menu.popUp(positioning: nil, at: NSPoint(x: 0, y: button.bounds.height), in: button)
