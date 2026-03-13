@@ -8,39 +8,48 @@ enum DisplayMode: String, CaseIterable, Identifiable {
 }
 
 struct SettingsView: View {
-    @AppStorage("statusBarDisplayMode") private var displayMode: DisplayMode = .text
+    @AppStorage("statusBarDisplayMode") private var displayMode: DisplayMode = .miniChart
     
     @StateObject private var autostart = Autostart.shared
     
     var body: some View {
-        Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 12) {
-            GridRow {
-                Text("Status Bar Display")
-                    .gridColumnAlignment(.trailing)
+        ZStack {
+            WeatherTheme.panelBackground(cornerRadius: 12)
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Settings")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundColor(WeatherTheme.labelPrimary)
                 
-                Picker("", selection: $displayMode) {
-                    ForEach(DisplayMode.allCases) { mode in
-                        Text(mode.rawValue).tag(mode)
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("Status Bar Display")
+                        .font(.system(size: 12, weight: .regular))
+                        .foregroundColor(WeatherTheme.labelPrimary)
+                    Picker("", selection: $displayMode) {
+                        ForEach(DisplayMode.allCases) { mode in
+                            Text(mode.rawValue).tag(mode)
+                        }
                     }
+                    .pickerStyle(.segmented)
                 }
-                .pickerStyle(SegmentedPickerStyle())
-                .labelsHidden()
-            }
-            
-            GridRow {
-                Text("Start at Login")
-                    .gridColumnAlignment(.trailing)
                 
-                Toggle("", isOn: Binding(
-                    get: { autostart.isEnabled },
-                    set: { autostart.toggle(enabled: $0) }
-                ))
-                .toggleStyle(.switch)
-                .labelsHidden()
+                Divider().background(WeatherTheme.separator)
+                
+                HStack {
+                    Text("Start at Login")
+                        .font(.system(size: 12, weight: .regular))
+                        .foregroundColor(WeatherTheme.labelPrimary)
+                    Spacer()
+                    Toggle("", isOn: Binding(
+                        get: { autostart.isEnabled },
+                        set: { autostart.toggle(enabled: $0) }
+                    ))
+                    .toggleStyle(.switch)
+                    .labelsHidden()
+                }
             }
+            .padding(12)
         }
-        .padding(16)
-        .frame(width: 320)
+        .frame(width: 360)
         .fixedSize()
     }
 }

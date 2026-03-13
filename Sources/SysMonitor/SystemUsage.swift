@@ -12,6 +12,7 @@ struct UsageMetrics {
     var memoryTotalGB: Double
     var diskUsedGB: Double
     var diskTotalGB: Double
+    var uptimeSeconds: TimeInterval
 }
 
 actor SystemUsage {
@@ -45,7 +46,8 @@ actor SystemUsage {
             memoryUsedGB: getMemory().used,
             memoryTotalGB: getMemory().total,
             diskUsedGB: diskUsed,
-            diskTotalGB: diskTotal
+            diskTotalGB: diskTotal,
+            uptimeSeconds: ProcessInfo.processInfo.systemUptime
         )
     }
     

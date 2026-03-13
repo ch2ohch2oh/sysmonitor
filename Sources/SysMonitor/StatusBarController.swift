@@ -21,7 +21,7 @@ class StatusBarController {
         // Setup Window (NSPanel)
         // StyleMask .borderless removes the title bar and standard window frame => "No Arrow"
         window = NSPanel(
-            contentRect: NSRect(x: 0, y: 0, width: 220, height: 300), // Height might vary, SwiftView will dictate
+            contentRect: NSRect(x: 0, y: 0, width: 260, height: 360), // Height might vary, SwiftView will dictate
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
             defer: false
@@ -66,7 +66,7 @@ class StatusBarController {
     
     private func updateStatusBar(with metrics: UsageMetrics) {
         // Read setting
-        let modeRaw = UserDefaults.standard.string(forKey: "statusBarDisplayMode") ?? "Text"
+        let modeRaw = UserDefaults.standard.string(forKey: "statusBarDisplayMode") ?? "Mini Chart"
         // If DisplayMode is internal to SettingsView.swift but top-level, we can access it. 
         // If not found, default to text.
         

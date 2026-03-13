@@ -18,12 +18,17 @@ class SettingsWindowController: NSWindowController {
         let hostingController = NSHostingController(rootView: settingsView)
         
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 300, height: 80),
+            contentRect: NSRect(x: 0, y: 0, width: 380, height: 240),
             styleMask: [.titled, .closable, .miniaturizable],
             backing: .buffered,
             defer: false
         )
         window.title = "Settings"
+        window.titleVisibility = .visible
+        window.titlebarAppearsTransparent = false
+        window.isMovableByWindowBackground = true
+        window.backgroundColor = .clear
+        window.isOpaque = false
         window.contentViewController = hostingController
         window.center()
         window.level = .mainMenu
