@@ -16,6 +16,8 @@ enum WeatherTheme {
     static let gpuColor = Color(red: 0.50, green: 0.34, blue: 0.68)
     static let memColor = Color(red: 0.18, green: 0.52, blue: 0.43)
     static let diskColor = Color(red: 0.74, green: 0.47, blue: 0.20)
+    static let downloadColor = Color(red: 0.18, green: 0.52, blue: 0.72)
+    static let uploadColor = Color(red: 0.58, green: 0.38, blue: 0.68)
     
     static func panelBackground(cornerRadius: CGFloat) -> some View {
         RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)

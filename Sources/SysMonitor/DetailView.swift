@@ -60,6 +60,20 @@ struct DetailView: View {
                 usesBar: false,
                 percentValue: memPercent()
             )
+            NetworkChartRow(
+                title: "Download",
+                icon: "arrow.down",
+                rate: viewModel.metrics.downloadBytesPerSecond,
+                history: viewModel.downloadHistory,
+                color: WeatherTheme.downloadColor
+            )
+            NetworkChartRow(
+                title: "Upload",
+                icon: "arrow.up",
+                rate: viewModel.metrics.uploadBytesPerSecond,
+                history: viewModel.uploadHistory,
+                color: WeatherTheme.uploadColor
+            )
             ForEach(viewModel.metrics.disks) { disk in
                 DiskUsageRow(disk: disk)
             }
@@ -83,6 +97,78 @@ struct DetailView: View {
             return String(format: "%dd %02dh %02dm", days, hours, minutes)
         }
         return String(format: "%02dh %02dm", hours, minutes)
+    }
+}
+
+private struct NetworkChartRow: View {
+    let title: String
+    let icon: String
+    let rate: Double
+    let history: [Double]
+    let color: Color
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Image(systemName: icon)
+                    .font(.system(size: 12, weight: .regular))
+                    .foregroundColor(WeatherTheme.labelSecondary)
+                    .frame(width: 14)
+                Text(title)
+                    .font(.system(size: 12, weight: .regular))
+                    .foregroundColor(WeatherTheme.labelPrimary)
+                Spacer()
+                Text(formatRate(rate))
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundColor(WeatherTheme.labelPrimary)
+                    .monospacedDigit()
+                    .lineLimit(1)
+            }
+            NetworkHistoryView(history: history, color: color)
+                .frame(height: 30)
+        }
+    }
+
+    private func formatRate(_ bytesPerSecond: Double) -> String {
+        let kilobytes = bytesPerSecond / 1_024
+        if kilobytes < 1 { return String(format: "%.0f B/s", bytesPerSecond) }
+        let megabytes = kilobytes / 1_024
+        if megabytes < 1 { return String(format: "%.0f KB/s", kilobytes) }
+        return String(format: "%.1f MB/s", megabytes)
+    }
+}
+
+private struct NetworkHistoryView: View {
+    let history: [Double]
+    let color: Color
+
+    var body: some View {
+        GeometryReader { geometry in
+            let maximum = max(history.max() ?? 0, 1_024 * 1_024)
+            path(width: geometry.size.width, height: geometry.size.height, maximum: maximum)
+                .stroke(color, style: StrokeStyle(lineWidth: 1.6, lineCap: .round, lineJoin: .round))
+        }
+        .background(Color.black.opacity(0.04))
+        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .stroke(WeatherTheme.border, lineWidth: 1)
+        )
+    }
+
+    private func path(width: CGFloat, height: CGFloat, maximum: Double) -> Path {
+        Path { path in
+            guard let first = history.first else { return }
+            let stepX = width / CGFloat(max(history.count - 1, 1))
+            path.move(to: CGPoint(x: 0, y: yPosition(first, height: height, maximum: maximum)))
+            for (index, value) in history.enumerated().dropFirst() {
+                path.addLine(to: CGPoint(x: CGFloat(index) * stepX, y: yPosition(value, height: height, maximum: maximum)))
+            }
+        }
+    }
+
+    private func yPosition(_ value: Double, height: CGFloat, maximum: Double) -> CGFloat {
+        height * (1 - CGFloat(min(value / maximum, 1)))
     }
 }
 

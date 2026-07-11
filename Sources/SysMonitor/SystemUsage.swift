@@ -11,6 +11,8 @@ struct UsageMetrics {
     var memoryUsedGB: Double
     var memoryTotalGB: Double
     var disks: [DiskUsage]
+    var downloadBytesPerSecond: Double
+    var uploadBytesPerSecond: Double
     var uptimeSeconds: TimeInterval
 }
 
@@ -33,6 +35,7 @@ actor SystemUsage {
     private var previousCount = mach_msg_type_number_t(0)
     private var pCoreCount: Int = 0
     private var eCoreCount: Int = 0
+    private var previousNetworkCounters: (received: UInt64, sent: UInt64, timestamp: Date)?
     
     init() {
         // Initialize CPU baseline
@@ -46,6 +49,7 @@ actor SystemUsage {
     
     func currentUsage() async -> UsageMetrics {
         let (cpu, perCore) = await getCPU()
+        let network = getNetworkRates()
         return UsageMetrics(
             cpuUsage: cpu,
             perCoreUsage: perCore,
@@ -55,6 +59,8 @@ actor SystemUsage {
             memoryUsedGB: getMemory().used,
             memoryTotalGB: getMemory().total,
             disks: getDisks(),
+            downloadBytesPerSecond: network.download,
+            uploadBytesPerSecond: network.upload,
             uptimeSeconds: ProcessInfo.processInfo.systemUptime
         )
     }
@@ -234,6 +240,46 @@ actor SystemUsage {
             )
         }
         .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+    }
+
+    // MARK: - Network
+    private func getNetworkRates() -> (download: Double, upload: Double) {
+        var interfaceAddresses: UnsafeMutablePointer<ifaddrs>?
+        guard getifaddrs(&interfaceAddresses) == 0, let firstAddress = interfaceAddresses else {
+            return (0, 0)
+        }
+        defer { freeifaddrs(firstAddress) }
+
+        var received: UInt64 = 0
+        var sent: UInt64 = 0
+        var currentAddress: UnsafeMutablePointer<ifaddrs>? = firstAddress
+
+        while let interface = currentAddress {
+            defer { currentAddress = interface.pointee.ifa_next }
+
+            guard let address = interface.pointee.ifa_addr,
+                  address.pointee.sa_family == UInt8(AF_LINK),
+                  let data = interface.pointee.ifa_data,
+                  String(cString: interface.pointee.ifa_name) != "lo0" else {
+                continue
+            }
+
+            let statistics = data.assumingMemoryBound(to: if_data.self).pointee
+            received += UInt64(statistics.ifi_ibytes)
+            sent += UInt64(statistics.ifi_obytes)
+        }
+
+        let now = Date()
+        defer { previousNetworkCounters = (received, sent, now) }
+
+        guard let previous = previousNetworkCounters else { return (0, 0) }
+        let elapsed = now.timeIntervalSince(previous.timestamp)
+        guard elapsed > 0 else { return (0, 0) }
+
+        return (
+            Double(received >= previous.received ? received - previous.received : 0) / elapsed,
+            Double(sent >= previous.sent ? sent - previous.sent : 0) / elapsed
+        )
     }
     
 

@@ -3,13 +3,15 @@ import Combine
 
 @MainActor
 class SystemUsageViewModel: ObservableObject {
-    @Published var metrics: UsageMetrics = UsageMetrics(cpuUsage: 0, perCoreUsage: [], eCoreCount: 0, pCoreCount: 0, gpuUsage: 0, memoryUsedGB: 0, memoryTotalGB: 0, disks: [], uptimeSeconds: 0)
+    @Published var metrics: UsageMetrics = UsageMetrics(cpuUsage: 0, perCoreUsage: [], eCoreCount: 0, pCoreCount: 0, gpuUsage: 0, memoryUsedGB: 0, memoryTotalGB: 0, disks: [], downloadBytesPerSecond: 0, uploadBytesPerSecond: 0, uptimeSeconds: 0)
     
     // History Data for Charts
     @Published var cpuHistory: [Double]
     @Published var perCoreHistory: [[Double]] // Index = Core Index
     @Published var gpuHistory: [Double]
     @Published var memoryHistory: [Double]
+    @Published var downloadHistory: [Double]
+    @Published var uploadHistory: [Double]
     
     private var timer: Timer?
     private let maxHistoryPoints = 60
@@ -20,6 +22,8 @@ class SystemUsageViewModel: ObservableObject {
         cpuHistory = zeros
         gpuHistory = zeros
         memoryHistory = zeros
+        downloadHistory = zeros
+        uploadHistory = zeros
         perCoreHistory = [] // Will be initialized when we know core count
         
         startTimer()
@@ -82,6 +86,9 @@ class SystemUsageViewModel: ObservableObject {
                 // Update Memory History
                 let memPercent = newMetrics.memoryTotalGB > 0 ? (newMetrics.memoryUsedGB / newMetrics.memoryTotalGB) * 100.0 : 0.0
                 self.addToHistory(&self.memoryHistory, value: memPercent)
+
+                self.addToHistory(&self.downloadHistory, value: newMetrics.downloadBytesPerSecond)
+                self.addToHistory(&self.uploadHistory, value: newMetrics.uploadBytesPerSecond)
                 
             }
         }
