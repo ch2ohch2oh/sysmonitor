@@ -60,15 +60,9 @@ struct DetailView: View {
                 usesBar: false,
                 percentValue: memPercent()
             )
-            MetricChartRow(
-                title: "Disk",
-                icon: "internaldrive",
-                value: String(format: "%.0f/%.0f GB", viewModel.metrics.diskUsedGB, viewModel.metrics.diskTotalGB),
-                history: viewModel.diskHistory,
-                color: WeatherTheme.diskColor,
-                usesBar: true,
-                percentValue: diskPercent()
-            )
+            ForEach(viewModel.metrics.disks) { disk in
+                DiskUsageRow(disk: disk)
+            }
         }
         .padding(.top, 6)
     }
@@ -78,10 +72,6 @@ struct DetailView: View {
         return (viewModel.metrics.memoryUsedGB / viewModel.metrics.memoryTotalGB) * 100.0
     }
     
-    private func diskPercent() -> Double {
-        if viewModel.metrics.diskTotalGB == 0 { return 0 }
-        return (viewModel.metrics.diskUsedGB / viewModel.metrics.diskTotalGB) * 100.0
-    }
     
     private func formatUptime(_ seconds: TimeInterval) -> String {
         let totalSeconds = max(Int(seconds), 0)
@@ -93,6 +83,32 @@ struct DetailView: View {
             return String(format: "%dd %02dh %02dm", days, hours, minutes)
         }
         return String(format: "%02dh %02dm", hours, minutes)
+    }
+}
+
+private struct DiskUsageRow: View {
+    let disk: DiskUsage
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Image(systemName: "internaldrive")
+                    .font(.system(size: 12, weight: .regular))
+                    .foregroundColor(WeatherTheme.labelSecondary)
+                    .frame(width: 14)
+                Text(disk.name)
+                    .font(.system(size: 12, weight: .regular))
+                    .foregroundColor(WeatherTheme.labelPrimary)
+                    .lineLimit(1)
+                Spacer()
+                Text(String(format: "%.0f/%.0f GB", disk.usedGB, disk.totalGB))
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundColor(WeatherTheme.labelPrimary)
+                    .monospacedDigit()
+            }
+            DiskBar(value: disk.percentUsed)
+                .frame(height: 12)
+        }
     }
 }
 

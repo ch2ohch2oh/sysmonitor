@@ -10,9 +10,19 @@ struct UsageMetrics {
     var gpuUsage: Double
     var memoryUsedGB: Double
     var memoryTotalGB: Double
-    var diskUsedGB: Double
-    var diskTotalGB: Double
+    var disks: [DiskUsage]
     var uptimeSeconds: TimeInterval
+}
+
+struct DiskUsage: Identifiable, Hashable {
+    let id: URL
+    let name: String
+    let usedGB: Double
+    let totalGB: Double
+
+    var percentUsed: Double {
+        totalGB > 0 ? (usedGB / totalGB) * 100.0 : 0.0
+    }
 }
 
 actor SystemUsage {
@@ -35,7 +45,6 @@ actor SystemUsage {
     }
     
     func currentUsage() async -> UsageMetrics {
-        let (diskUsed, diskTotal) = getDisk()
         let (cpu, perCore) = await getCPU()
         return UsageMetrics(
             cpuUsage: cpu,
@@ -45,8 +54,7 @@ actor SystemUsage {
             gpuUsage: getGPU(),
             memoryUsedGB: getMemory().used,
             memoryTotalGB: getMemory().total,
-            diskUsedGB: diskUsed,
-            diskTotalGB: diskTotal,
+            disks: getDisks(),
             uptimeSeconds: ProcessInfo.processInfo.systemUptime
         )
     }
@@ -190,18 +198,42 @@ actor SystemUsage {
     }
     
     // MARK: - Disk
-    private func getDisk() -> (used: Double, total: Double) {
-        let fileURL = URL(fileURLWithPath: "/")
-        do {
-            let values = try fileURL.resourceValues(forKeys: [.volumeAvailableCapacityKey, .volumeTotalCapacityKey])
-            if let capacity = values.volumeAvailableCapacity, let total = values.volumeTotalCapacity {
-                let totalGB = Double(total) / 1024 / 1024 / 1024
-                let freeGB = Double(capacity) / 1024 / 1024 / 1024
-                let usedGB = totalGB - freeGB
-                return (usedGB, totalGB)
+    private func getDisks() -> [DiskUsage] {
+        let keys: Set<URLResourceKey> = [
+            .volumeNameKey,
+            .volumeIsLocalKey,
+            .volumeIsReadOnlyKey,
+            .volumeAvailableCapacityKey,
+            .volumeTotalCapacityKey
+        ]
+
+        guard let volumeURLs = FileManager.default.mountedVolumeURLs(
+            includingResourceValuesForKeys: Array(keys),
+            options: [.skipHiddenVolumes]
+        ) else {
+            return []
+        }
+
+        return volumeURLs.compactMap { url in
+            guard let values = try? url.resourceValues(forKeys: keys),
+                  values.volumeIsLocal == true,
+                  values.volumeIsReadOnly == false,
+                  let available = values.volumeAvailableCapacity,
+                  let total = values.volumeTotalCapacity,
+                  total > 0 else {
+                return nil
             }
-        } catch {}
-        return (0.0, 0.0)
+
+            let totalGB = Double(total) / 1024 / 1024 / 1024
+            let usedGB = totalGB - Double(available) / 1024 / 1024 / 1024
+            return DiskUsage(
+                id: url,
+                name: values.volumeName ?? url.lastPathComponent,
+                usedGB: usedGB,
+                totalGB: totalGB
+            )
+        }
+        .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
     }
     
 
