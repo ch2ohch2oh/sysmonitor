@@ -10,10 +10,12 @@ enum WeatherTheme {
     static let labelSecondary = Color.black.opacity(0.65)
     static let labelTertiary = Color.black.opacity(0.45)
     
-    static let cpuColor = Color.black.opacity(0.75)
-    static let gpuColor = Color.black.opacity(0.75)
-    static let memColor = Color.black.opacity(0.75)
-    static let diskColor = Color.black.opacity(0.75)
+    // Muted semantic colors let the four resource types remain distinguishable
+    // while preserving the calm, monochrome-forward visual language.
+    static let cpuColor = Color(red: 0.23, green: 0.42, blue: 0.72)
+    static let gpuColor = Color(red: 0.50, green: 0.34, blue: 0.68)
+    static let memColor = Color(red: 0.18, green: 0.52, blue: 0.43)
+    static let diskColor = Color(red: 0.74, green: 0.47, blue: 0.20)
     
     static func panelBackground(cornerRadius: CGFloat) -> some View {
         RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)

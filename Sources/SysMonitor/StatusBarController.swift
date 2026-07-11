@@ -102,7 +102,7 @@ class StatusBarController {
     }
     
     private func updateStatusBarAsChart(_ metrics: UsageMetrics) {
-        let width: CGFloat = 150 // Match statusItem length
+        let width: CGFloat = 164
         let height: CGFloat = 22 // Standard status bar height
         let size = NSSize(width: width, height: height)
         let img = NSImage(size: size)
@@ -110,16 +110,18 @@ class StatusBarController {
         img.lockFocus()
         
         // Draw CPU Chart (Left half)
-        let cpuRect = NSRect(x: 0, y: 0, width: width / 2 - 2, height: height)
+        let cpuRect = NSRect(x: 0, y: 0, width: width / 2 - 3, height: height)
         let cpuVal = Int(metrics.cpuUsage)
         drawChart(in: cpuRect, history: viewModel.cpuHistory, color: .white, title: "CPU", value: "\(cpuVal)%")
         
         // Draw RAM Chart (Right half)
-        let ramRect = NSRect(x: width / 2 + 2, y: 0, width: width / 2 - 2, height: height)
+        let ramRect = NSRect(x: width / 2 + 3, y: 0, width: width / 2 - 3, height: height)
         let memPercent = metrics.memoryTotalGB > 0 ? Int((metrics.memoryUsedGB / metrics.memoryTotalGB) * 100) : 0
         drawChart(in: ramRect, history: viewModel.memoryHistory, color: .white, title: "RAM", value: "\(memPercent)%")
         
         img.unlockFocus()
+        // Let macOS tint the complete image for the active menu-bar appearance.
+        img.isTemplate = true
         
         if let button = statusItem.button {
             button.title = "" // Clear text
