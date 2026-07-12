@@ -1,6 +1,7 @@
 import Cocoa
 import SwiftUI
 import Combine
+import os
 
 @MainActor
 class StatusBarController {
@@ -8,6 +9,7 @@ class StatusBarController {
     private var statusItem: NSStatusItem
     private var window: NSPanel
     private var eventMonitor: EventMonitor?
+    private let popupLogger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "com.sysmonitor", category: "PopupPosition")
     
     // Shared ViewModel
     private var viewModel = SystemUsageViewModel()
@@ -248,10 +250,21 @@ class StatusBarController {
         let y = buttonRectInScreen.origin.y - contentSize.height - 5 // 5px gap
         
         let frame = NSRect(x: x, y: y, width: contentSize.width, height: contentSize.height)
+
+        popupLogger.debug(
+            "Popup placement requested: buttonWindow=\(String(describing: button.window), privacy: .public), buttonRect=\(String(describing: buttonRectInScreen), privacy: .public), contentSize=\(String(describing: contentSize), privacy: .public), frame=\(String(describing: frame), privacy: .public)"
+        )
         
         window.setFrame(frame, display: true)
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
+
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.popupLogger.debug(
+                "Popup placement applied: frame=\(String(describing: self.window.frame), privacy: .public), contentFrame=\(String(describing: self.window.contentView?.frame), privacy: .public)"
+            )
+        }
         
         eventMonitor?.start()
     }
