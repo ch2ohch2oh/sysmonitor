@@ -2,287 +2,138 @@ import Foundation
 import Darwin
 import IOKit
 
-struct UsageMetrics {
-    var cpuUsage: Double
-    var perCoreUsage: [Double]
-    var eCoreCount: Int
-    var pCoreCount: Int
-    var gpuUsage: Double
-    var memoryUsedGB: Double
-    var memoryTotalGB: Double
-    var disks: [DiskUsage]
-    var downloadBytesPerSecond: Double
-    var uploadBytesPerSecond: Double
-    var uptimeSeconds: TimeInterval
-}
+actor SystemUsage: UsageSampling {
+    static let shared = SystemUsage()
+    private var cpuTracker = CPUTracker()
+    private var networkTracker = NetworkTracker()
+    private var cachedDisks: Reading<[DiskUsage]> = .loading
+    private var lastDiskSample: TimeInterval = -.infinity
 
-struct DiskUsage: Identifiable, Hashable {
-    let id: URL
-    let name: String
-    let usedGB: Double
-    let totalGB: Double
-
-    var percentUsed: Double {
-        totalGB > 0 ? (usedGB / totalGB) * 100.0 : 0.0
-    }
-}
-
-actor SystemUsage {
-    nonisolated static let shared = SystemUsage()
-    
-    // CPU State
-    private var previousInfo = processor_info_array_t(bitPattern: 0)
-    private var previousCount = mach_msg_type_number_t(0)
-    private var pCoreCount: Int = 0
-    private var eCoreCount: Int = 0
-    private var previousNetworkCounters: (received: UInt64, sent: UInt64, timestamp: Date)?
-    
-    init() {
-        // Initialize CPU baseline
-        pCoreCount = SystemUsage.getSysctlInt("hw.perflevel0.logicalcpu")
-        eCoreCount = SystemUsage.getSysctlInt("hw.perflevel1.logicalcpu")
-        
-        Task {
-            let _ = await getCPU()
-        }
-    }
-    
     func currentUsage() async -> UsageMetrics {
-        let (cpu, perCore) = await getCPU()
-        let network = getNetworkRates()
+        let time = ProcessInfo.processInfo.systemUptime
+        if time - lastDiskSample >= 15 {
+            cachedDisks = getDisks()
+            lastDiskSample = time
+        }
         return UsageMetrics(
-            cpuUsage: cpu,
-            perCoreUsage: perCore,
-            eCoreCount: eCoreCount,
-            pCoreCount: pCoreCount,
-            gpuUsage: getGPU(),
-            memoryUsedGB: getMemory().used,
-            memoryTotalGB: getMemory().total,
-            disks: getDisks(),
-            downloadBytesPerSecond: network.download,
-            uploadBytesPerSecond: network.upload,
-            uptimeSeconds: ProcessInfo.processInfo.systemUptime
+            sampledAt: Date(), cpu: getCPU(at: time), gpu: getGPU(), memory: getMemory(),
+            disks: cachedDisks, network: getNetworkRates(at: time), uptimeSeconds: time
         )
     }
-    
-    private static func getSysctlInt(_ name: String) -> Int {
-        var size: Int = 0
-        sysctlbyname(name, nil, &size, nil, 0)
-        var value: Int32 = 0
-        sysctlbyname(name, &value, &size, nil, 0)
-        return Int(value)
-    }
-    
-    // MARK: - CPU
-    private func getCPU() async -> (Double, [Double]) {
-        var count = mach_msg_type_number_t(0)
-        var info = processor_info_array_t(bitPattern: 0)
+
+    private func getCPU(at time: TimeInterval) -> Reading<Double> {
+        var cpuCount: natural_t = 0
+        var info: processor_info_array_t?
+        var infoCount: mach_msg_type_number_t = 0
         let host = mach_host_self()
-        
-        var msgCount = count
-        let result = host_processor_info(host, PROCESSOR_CPU_LOAD_INFO, &count, &info, &msgCount)
-        
-        guard result == KERN_SUCCESS, let infoArray = info else {
-            return (0.0, [])
+        defer { mach_port_deallocate(mach_task_self_, host) }
+        let result = host_processor_info(host, PROCESSOR_CPU_LOAD_INFO, &cpuCount, &info, &infoCount)
+        guard result == KERN_SUCCESS, let info else {
+            cpuTracker.reset()
+            return .failed("CPU statistics could not be read (Mach error \(result)).")
         }
-        
-        var totalSystem: Int32 = 0
-        var totalUser: Int32 = 0
-        var totalIdle: Int32 = 0
-        
-        // 'count' is the number of processors (not the number of integers in info array)
-        let numCPUs = Int(count)
-        var coreUsages: [Double] = []
-        
-        if let prevInfo = previousInfo {
-            for i in 0..<numCPUs {
-                let offset = i * Int(CPU_STATE_MAX)
-                let baseIndex = offset
-                
-                let user = infoArray[baseIndex + Int(CPU_STATE_USER)] - prevInfo[baseIndex + Int(CPU_STATE_USER)]
-                let system = infoArray[baseIndex + Int(CPU_STATE_SYSTEM)] - prevInfo[baseIndex + Int(CPU_STATE_SYSTEM)]
-                let nice = infoArray[baseIndex + Int(CPU_STATE_NICE)] - prevInfo[baseIndex + Int(CPU_STATE_NICE)]
-                let idle = infoArray[baseIndex + Int(CPU_STATE_IDLE)] - prevInfo[baseIndex + Int(CPU_STATE_IDLE)]
-                
-                let coreTotal = user + system + nice + idle
-                let coreUsed = user + system + nice
-                
-                if coreTotal > 0 {
-                    coreUsages.append(Double(coreUsed) / Double(coreTotal) * 100.0)
-                } else {
-                    coreUsages.append(0.0)
-                }
-                
-                totalUser += user + nice
-                totalSystem += system
-                totalIdle += idle
-            }
-            
-            let prevSize = Int(previousCount) * MemoryLayout<integer_t>.size
-            vm_deallocate(mach_task_self_, vm_address_t(bitPattern: prevInfo), vm_size_t(prevSize))
-        } else {
-            // First run, populate 0s
-            coreUsages = Array(repeating: 0.0, count: numCPUs)
+        defer {
+            vm_deallocate(mach_task_self_, vm_address_t(bitPattern: info),
+                          vm_size_t(infoCount) * vm_size_t(MemoryLayout<integer_t>.size))
         }
-        
-        // Update previous
-        previousInfo = info
-        previousCount = count
-        
-        let total = totalSystem + totalUser + totalIdle
-        if total == 0 { return (0.0, coreUsages) }
-        
-        let overall = Double(totalSystem + totalUser) / Double(total) * 100.0
-        return (overall, coreUsages)
-    }
-    
-    // MARK: - GPU
-    private func getGPU() -> Double {
-        var utilization: Double = 0.0
-        var iterator: io_iterator_t = 0
-        let result = IOServiceGetMatchingServices(kIOMainPortDefault, IOServiceMatching("IOAccelerator"), &iterator)
-        
-        if result == KERN_SUCCESS {
-            var service: io_registry_entry_t = IOIteratorNext(iterator)
-            var count = 0
-            while service != 0 {
-                if let stats = IORegistryEntryCreateCFProperty(service, "PerformanceStatistics" as CFString, kCFAllocatorDefault, 0)?.takeRetainedValue() as? [String: Any] {
-                    // Try different possible keys for GPU utilization
-                    if let util = stats["Device Utilization %"] as? Int {
-                        utilization += Double(util)
-                        count += 1
-                    } else if let util = stats["GPU Activity(%)"] as? Int {
-                        utilization += Double(util)
-                        count += 1
-                    } else if let util = stats["Utilization %"] as? Int {
-                        utilization += Double(util)
-                        count += 1
-                    }
-                }
-                IOObjectRelease(service)
-                service = IOIteratorNext(iterator)
-            }
-            IOObjectRelease(iterator)
-            
-            if count > 0 {
-                return utilization / Double(count)
-            }
+        guard Int(infoCount) >= Int(cpuCount) * Int(CPU_STATE_MAX) else {
+            cpuTracker.reset()
+            return .failed("CPU statistics were incomplete.")
         }
-        return 0.0
-    }
-    // MARK: - Memory
-    private func getMemory() -> (used: Double, total: Double) {
-        var size = mach_msg_type_number_t(MemoryLayout<vm_statistics64_data_t>.size / MemoryLayout<integer_t>.size)
-        var hostInfo = vm_statistics64_data_t()
-        
-        let result = withUnsafeMutablePointer(to: &hostInfo) {
-            $0.withMemoryRebound(to: integer_t.self, capacity: Int(size)) {
-                host_statistics64(mach_host_self(), HOST_VM_INFO64, $0, &size)
-            }
-        }
-        
-        let totalBytes = ProcessInfo.processInfo.physicalMemory
-        
-        if result == KERN_SUCCESS {
-            let pageSize = sysconf(_SC_PAGESIZE)
-            // Use active + wire as reliable "used" metric for user perception, or active + wire + compressed?
-            // "App Memory" usually includes wired + active + compressed.
-            // "Used Memory" in Activity Monitor includes everything except cached files.
-            
-            // vm_statistics64 fields are in pages.
-            let usedBytes = UInt64(hostInfo.active_count + hostInfo.wire_count) * UInt64(pageSize)
-            // Adding compressed
-            let compressedBytes = UInt64(hostInfo.compressor_page_count) * UInt64(pageSize)
-            
-             let totalUsed = Double(usedBytes + compressedBytes) / 1024 / 1024 / 1024
-             let totalGB = Double(totalBytes) / 1024 / 1024 / 1024
-             
-             return (totalUsed, totalGB)
-        }
-        
-        return (0, 0)
-    }
-    
-    // MARK: - Disk
-    private func getDisks() -> [DiskUsage] {
-        let keys: Set<URLResourceKey> = [
-            .volumeNameKey,
-            .volumeIsLocalKey,
-            .volumeIsReadOnlyKey,
-            .volumeAvailableCapacityKey,
-            .volumeTotalCapacityKey
-        ]
-
-        guard let volumeURLs = FileManager.default.mountedVolumeURLs(
-            includingResourceValuesForKeys: Array(keys),
-            options: [.skipHiddenVolumes]
-        ) else {
-            return []
-        }
-
-        return volumeURLs.compactMap { url in
-            guard let values = try? url.resourceValues(forKeys: keys),
-                  values.volumeIsLocal == true,
-                  values.volumeIsReadOnly == false,
-                  let available = values.volumeAvailableCapacity,
-                  let total = values.volumeTotalCapacity,
-                  total > 0 else {
-                return nil
-            }
-
-            let totalGB = Double(total) / 1024 / 1024 / 1024
-            let usedGB = totalGB - Double(available) / 1024 / 1024 / 1024
-            return DiskUsage(
-                id: url,
-                name: values.volumeName ?? url.lastPathComponent,
-                usedGB: usedGB,
-                totalGB: totalGB
+        let counters = (0..<Int(cpuCount)).map { index in
+            let offset = index * Int(CPU_STATE_MAX)
+            return CPUCounters(
+                user: UInt32(bitPattern: info[offset + Int(CPU_STATE_USER)]),
+                system: UInt32(bitPattern: info[offset + Int(CPU_STATE_SYSTEM)]),
+                nice: UInt32(bitPattern: info[offset + Int(CPU_STATE_NICE)]),
+                idle: UInt32(bitPattern: info[offset + Int(CPU_STATE_IDLE)])
             )
         }
-        .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+        return cpuTracker.update(counters, at: time)
     }
 
-    // MARK: - Network
-    private func getNetworkRates() -> (download: Double, upload: Double) {
-        var interfaceAddresses: UnsafeMutablePointer<ifaddrs>?
-        guard getifaddrs(&interfaceAddresses) == 0, let firstAddress = interfaceAddresses else {
-            return (0, 0)
-        }
-        defer { freeifaddrs(firstAddress) }
-
-        var received: UInt64 = 0
-        var sent: UInt64 = 0
-        var currentAddress: UnsafeMutablePointer<ifaddrs>? = firstAddress
-
-        while let interface = currentAddress {
-            defer { currentAddress = interface.pointee.ifa_next }
-
-            guard let address = interface.pointee.ifa_addr,
-                  address.pointee.sa_family == UInt8(AF_LINK),
-                  let data = interface.pointee.ifa_data,
-                  String(cString: interface.pointee.ifa_name) != "lo0" else {
-                continue
+    private func getGPU() -> Reading<Double> {
+        var iterator: io_iterator_t = 0
+        let result = IOServiceGetMatchingServices(kIOMainPortDefault, IOServiceMatching("IOAccelerator"), &iterator)
+        guard result == KERN_SUCCESS else { return .failed("GPU statistics could not be read.") }
+        defer { IOObjectRelease(iterator) }
+        var values: [Double] = []
+        var service = IOIteratorNext(iterator)
+        while service != 0 {
+            if let stats = IORegistryEntryCreateCFProperty(service, "PerformanceStatistics" as CFString,
+                                                          kCFAllocatorDefault, 0)?.takeRetainedValue() as? [String: Any] {
+                for key in ["Device Utilization %", "GPU Activity(%)", "Utilization %"] {
+                    if let value = stats[key] as? NSNumber, value.doubleValue.isFinite {
+                        values.append(min(max(value.doubleValue, 0), 100))
+                        break
+                    }
+                }
             }
-
-            let statistics = data.assumingMemoryBound(to: if_data.self).pointee
-            received += UInt64(statistics.ifi_ibytes)
-            sent += UInt64(statistics.ifi_obytes)
+            IOObjectRelease(service)
+            service = IOIteratorNext(iterator)
         }
-
-        let now = Date()
-        defer { previousNetworkCounters = (received, sent, now) }
-
-        guard let previous = previousNetworkCounters else { return (0, 0) }
-        let elapsed = now.timeIntervalSince(previous.timestamp)
-        guard elapsed > 0 else { return (0, 0) }
-
-        return (
-            Double(received >= previous.received ? received - previous.received : 0) / elapsed,
-            Double(sent >= previous.sent ? sent - previous.sent : 0) / elapsed
-        )
+        guard !values.isEmpty else { return .unavailable("This Mac does not expose a supported GPU utilization counter.") }
+        return .available(values.reduce(0, +) / Double(values.count))
     }
-    
 
-    
+    private func getMemory() -> Reading<MemoryUsage> {
+        var count = mach_msg_type_number_t(MemoryLayout<vm_statistics64_data_t>.size / MemoryLayout<integer_t>.size)
+        var info = vm_statistics64_data_t()
+        let host = mach_host_self()
+        defer { mach_port_deallocate(mach_task_self_, host) }
+        let result = withUnsafeMutablePointer(to: &info) {
+            $0.withMemoryRebound(to: integer_t.self, capacity: Int(count)) {
+                host_statistics64(host, HOST_VM_INFO64, $0, &count)
+            }
+        }
+        let pageSize = sysconf(_SC_PAGESIZE)
+        guard result == KERN_SUCCESS, pageSize > 0 else { return .failed("Memory statistics could not be read.") }
+        let usedPages = UInt64(info.active_count) + UInt64(info.wire_count) + UInt64(info.compressor_page_count)
+        let total = Double(ProcessInfo.processInfo.physicalMemory) / 1_073_741_824
+        var pressureValue: Int32 = 0
+        var size = MemoryLayout<Int32>.size
+        let pressure: MemoryPressure?
+        if sysctlbyname("kern.memorystatus_vm_pressure_level", &pressureValue, &size, nil, 0) == 0 {
+            switch pressureValue {
+            case 1: pressure = .normal
+            case 2: pressure = .warning
+            case 4: pressure = .critical
+            default: pressure = nil
+            }
+        } else { pressure = nil }
+        return .available(MemoryUsage(usedGB: min(Double(usedPages) * Double(pageSize) / 1_073_741_824, total),
+                                      totalGB: total, pressure: pressure))
+    }
 
+    private func getDisks() -> Reading<[DiskUsage]> {
+        let keys: Set<URLResourceKey> = [.volumeNameKey, .volumeIsLocalKey, .volumeIsReadOnlyKey,
+                                        .volumeAvailableCapacityKey, .volumeTotalCapacityKey]
+        guard let urls = FileManager.default.mountedVolumeURLs(includingResourceValuesForKeys: Array(keys),
+                                                               options: [.skipHiddenVolumes]) else {
+            return .failed("Mounted disks could not be enumerated.")
+        }
+        var readFailed = false
+        let disks: [DiskUsage] = urls.compactMap { url in
+            guard let values = try? url.resourceValues(forKeys: keys) else {
+                readFailed = true
+                return nil
+            }
+            guard values.volumeIsLocal == true, values.volumeIsReadOnly == false else { return nil }
+            guard let available = values.volumeAvailableCapacity, let total = values.volumeTotalCapacity,
+                  total > 0 else { readFailed = true; return nil }
+            return DiskUsage(id: url, name: values.volumeName ?? url.lastPathComponent,
+                             usedGB: Double(max(total - available, 0)) / 1_073_741_824,
+                             totalGB: Double(total) / 1_073_741_824)
+        }.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+        if readFailed { return .failed("Some disk statistics could not be read. Retrying within 15 seconds.") }
+        return disks.isEmpty ? .unavailable("No writable local disks were found.") : .available(disks)
+    }
+
+    private func getNetworkRates(at time: TimeInterval) -> Reading<NetworkRates> {
+        guard let counters = NetworkInterfaces.readCounters() else {
+            networkTracker.reset()
+            return .failed("Network interface statistics could not be read.")
+        }
+        return networkTracker.update(counters, at: time)
+    }
 }

@@ -1,103 +1,54 @@
-import SwiftUI
+import Foundation
 import Combine
 
 @MainActor
-class SystemUsageViewModel: ObservableObject {
-    @Published var metrics: UsageMetrics = UsageMetrics(cpuUsage: 0, perCoreUsage: [], eCoreCount: 0, pCoreCount: 0, gpuUsage: 0, memoryUsedGB: 0, memoryTotalGB: 0, disks: [], downloadBytesPerSecond: 0, uploadBytesPerSecond: 0, uptimeSeconds: 0)
-    
-    // History Data for Charts
-    @Published var cpuHistory: [Double]
-    @Published var perCoreHistory: [[Double]] // Index = Core Index
-    @Published var gpuHistory: [Double]
-    @Published var memoryHistory: [Double]
-    @Published var downloadHistory: [Double]
-    @Published var uploadHistory: [Double]
-    
+final class SystemUsageViewModel: ObservableObject {
+    @Published private(set) var snapshot = UsageSnapshot()
+    private let sampler: any UsageSampling
     private var timer: Timer?
-    private let maxHistoryPoints = 60
-    
-    init() {
-        // Initialize with zeros so charts scroll in
-        let zeros = Array(repeating: 0.0, count: maxHistoryPoints)
-        cpuHistory = zeros
-        gpuHistory = zeros
-        memoryHistory = zeros
-        downloadHistory = zeros
-        uploadHistory = zeros
-        perCoreHistory = [] // Will be initialized when we know core count
-        
-        startTimer()
+    private var fetchTask: Task<Void, Never>?
+    private var generation = 0
+
+    init(sampler: any UsageSampling = SystemUsage.shared, startAutomatically: Bool = true) {
+        self.sampler = sampler
+        if startAutomatically { startTimer() }
     }
-    
+
     func startTimer() {
-        timer?.invalidate()
-        
-        // Initial fetch
+        stopTimer()
         fetchMetrics()
-        
-        timer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
-            Task { @MainActor in
-                self?.fetchMetrics()
+        let timer = Timer(timeInterval: 1, repeats: true) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                var next = self.snapshot
+                next.refreshFreshness(at: Date())
+                if next.isStale != self.snapshot.isStale { self.snapshot = next }
+                self.fetchMetrics()
             }
         }
+        self.timer = timer
+        RunLoop.main.add(timer, forMode: .common)
     }
-    
+
     func stopTimer() {
         timer?.invalidate()
         timer = nil
+        generation += 1
+        fetchTask?.cancel()
+        fetchTask = nil
     }
-    
-    private func fetchMetrics() {
-        Task {
-            let newMetrics = await SystemUsage.shared.currentUsage()
-            
-            await MainActor.run {
-                self.metrics = newMetrics
-                
-                // Update CPU History
-                self.addToHistory(&self.cpuHistory, value: newMetrics.cpuUsage)
-                
-                // Update Per-Core History
-                if self.perCoreHistory.isEmpty && !newMetrics.perCoreUsage.isEmpty {
-                    // Initialize with 60 zeros for each core
-                    self.perCoreHistory = newMetrics.perCoreUsage.map { _ in
-                         Array(repeating: 0.0, count: self.maxHistoryPoints)
-                    }
-                }
-                
-                if !newMetrics.perCoreUsage.isEmpty {
-                     if self.perCoreHistory.count != newMetrics.perCoreUsage.count {
-                        // Core count mismatch / fallback re-init
-                        self.perCoreHistory = newMetrics.perCoreUsage.map { _ in
-                             Array(repeating: 0.0, count: self.maxHistoryPoints)
-                        }
-                    }
-                    
-                    for (index, usage) in newMetrics.perCoreUsage.enumerated() {
-                        if index < self.perCoreHistory.count {
-                             self.addToHistory(&self.perCoreHistory[index], value: usage)
-                        }
-                    }
-                }
-                
-                // Update GPU History
-                self.addToHistory(&self.gpuHistory, value: newMetrics.gpuUsage)
-                
-                // Update Memory History
-                let memPercent = newMetrics.memoryTotalGB > 0 ? (newMetrics.memoryUsedGB / newMetrics.memoryTotalGB) * 100.0 : 0.0
-                self.addToHistory(&self.memoryHistory, value: memPercent)
 
-                self.addToHistory(&self.downloadHistory, value: newMetrics.downloadBytesPerSecond)
-                self.addToHistory(&self.uploadHistory, value: newMetrics.uploadBytesPerSecond)
-                
-            }
-        }
-    }
-    
-    private func addToHistory(_ history: inout [Double], value: Double) {
-        history.append(value)
-        if history.count > maxHistoryPoints {
-            history.removeFirst()
+    func fetchMetrics() {
+        guard fetchTask == nil else { return }
+        let generation = generation
+        let sampler = sampler
+        fetchTask = Task { [weak self] in
+            let metrics = await sampler.currentUsage()
+            guard !Task.isCancelled, let self, self.generation == generation else { return }
+            var next = self.snapshot
+            next.append(metrics)
+            self.snapshot = next
+            self.fetchTask = nil
         }
     }
 }

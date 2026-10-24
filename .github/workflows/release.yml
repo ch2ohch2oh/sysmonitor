@@ -18,7 +18,10 @@ jobs:
       - name: Build and Package
         env:
           VERSION: ${{ github.ref_name }}
+          BUILD_NUMBER: ${{ github.run_number }}
         run: |
+          set -euo pipefail
+          swift test
           # Strip 'v' prefix if present in github.ref_name for safety, though package.sh also handles it
           export VERSION=${VERSION#v}
           chmod +x package.sh
@@ -26,9 +29,7 @@ jobs:
 
       - name: Compress App
         run: |
-          # Create zip with the app bundle
-          # Using zip -r to recursively compress
-          zip -r SysMonitor.zip SysMonitor.app
+          ditto -c -k --keepParent SysMonitor.app SysMonitor.zip
 
       - name: Release
         uses: softprops/action-gh-release@v1

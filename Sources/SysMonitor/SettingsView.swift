@@ -1,4 +1,5 @@
 import SwiftUI
+import ServiceManagement
 
 enum DisplayMode: String, CaseIterable, Identifiable {
     case text = "Text"
@@ -56,10 +57,20 @@ struct SettingsView: View {
                 .labelsHidden()
                 .frame(width: 160, alignment: .trailing)
             }
+            if autostart.needsApproval {
+                Text("Approve SysMonitor in System Settings → General → Login Items.")
+                    .font(.caption).foregroundColor(.secondary)
+                Button("Open Login Items") { SMAppService.openSystemSettingsLoginItems() }
+            }
+            if let error = autostart.errorMessage {
+                Text(error).font(.caption).foregroundColor(.red).fixedSize(horizontal: false, vertical: true)
+            }
         }
         .padding(14)
         .frame(width: 360)
         .fixedSize()
+        .onAppear { autostart.refresh() }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in autostart.refresh() }
     }
 }
 

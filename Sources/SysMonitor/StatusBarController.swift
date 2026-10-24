@@ -3,6 +3,10 @@ import SwiftUI
 import Combine
 import os
 
+private final class MonitorPanel: NSPanel {
+    override var canBecomeKey: Bool { true }
+}
+
 @MainActor
 class StatusBarController {
     private var statusBar: NSStatusBar
@@ -17,13 +21,10 @@ class StatusBarController {
     
     init() {
         statusBar = NSStatusBar.system
-        // Use variable length to avoid fixed padding
         statusItem = statusBar.statusItem(withLength: NSStatusItem.variableLength)
         
-        // Setup Window (NSPanel)
-        // StyleMask .borderless removes the title bar and standard window frame => "No Arrow"
-        window = NSPanel(
-            contentRect: NSRect(x: 0, y: 0, width: 260, height: 360), // Height might vary, SwiftView will dictate
+        window = MonitorPanel(
+            contentRect: NSRect(origin: .zero, size: DetailView.popupSize),
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
             defer: false
@@ -33,13 +34,10 @@ class StatusBarController {
         window.backgroundColor = .clear
         window.isOpaque = false
         window.hasShadow = true
+        window.title = "SysMonitor"
         
-        // Pass shared viewModel to DetailView
-        let detailView = DetailView(viewModel: viewModel)
-        // Use NSHostingView directly for the window content
+        let detailView = makeDetailView(height: DetailView.popupSize.height)
         let hostingView = NSHostingView(rootView: detailView)
-        // hostingView.translatesAutoresizingMaskIntoConstraints = false 
-        // Autoresizing is simpler for fixed size content.
         
         window.contentView = hostingView
         
@@ -52,58 +50,66 @@ class StatusBarController {
         }
         
         // Setup Event Monitor to detect clicks outside
-        eventMonitor = EventMonitor(mask: [.leftMouseDown, .rightMouseDown]) { [weak self] event in
-            if let strongSelf = self, strongSelf.window.isVisible {
-                strongSelf.hideWindow()
+        eventMonitor = EventMonitor(mask: [.leftMouseDown, .rightMouseDown, .keyDown]) { [weak self] event in
+            guard let self, self.window.isVisible else { return }
+            if event?.type == .keyDown {
+                if event?.keyCode == 53 { self.hideWindow() }
+            } else if RunLoop.current.currentMode == .eventTracking {
+                // Keep the popup open while its gear menu is tracking a selection.
+                return
+            } else if event?.window !== self.window && event?.window !== self.statusItem.button?.window {
+                self.hideWindow()
             }
         }
         
         // Subscribe to metrics updates
-        viewModel.$metrics
-            .sink { [weak self] metrics in
-                self?.updateStatusBar(with: metrics)
+        viewModel.$snapshot
+            .sink { [weak self] snapshot in
+                self?.updateStatusBar(with: snapshot)
             }
             .store(in: &cancellables)
     }
     
-    private func updateStatusBar(with metrics: UsageMetrics) {
-        // Read setting
+    private func updateStatusBar(with snapshot: UsageSnapshot) {
         let modeRaw = UserDefaults.standard.string(forKey: "statusBarDisplayMode") ?? "Mini Chart"
-        // If DisplayMode is internal to SettingsView.swift but top-level, we can access it. 
-        // If not found, default to text.
         
         if modeRaw == "Mini Chart" {
-            updateStatusBarAsChart(metrics)
+            updateStatusBarAsChart(snapshot)
         } else {
-            updateStatusBarAsText(metrics)
+            updateStatusBarAsText(snapshot)
         }
+        let cpu = snapshot.isStale ? "Stale" : MetricFormatting.percent(snapshot.metrics.cpu.value)
+        let memory = snapshot.isStale ? "Stale" : MetricFormatting.percent(snapshot.metrics.memory.value?.percentUsed)
+        let summary = "SysMonitor. CPU \(cpu), RAM \(memory). Click for details, Settings, and Quit."
+        statusItem.button?.toolTip = summary
+        statusItem.button?.setAccessibilityLabel(summary)
     }
 
-    private func updateStatusBarAsText(_ metrics: UsageMetrics) {
+    private func updateStatusBarAsText(_ snapshot: UsageSnapshot) {
         // Clear image and ensure no space is reserved for it
         if statusItem.button?.image != nil {
             statusItem.button?.image = nil
         }
         statusItem.button?.imagePosition = .noImage
         
-        // Memory as Percentage:
-        let memPercent = metrics.memoryTotalGB > 0 ? Int((metrics.memoryUsedGB / metrics.memoryTotalGB) * 100) : 0
-        
-        // C:%3d%% -> 3 digits. Replace spaces with Figure Space (U+2007) to match digit width.
-        let figureSpace = "\u{2007}"
-        let cpuText = String(format: "%3d", Int(metrics.cpuUsage)).replacingOccurrences(of: " ", with: figureSpace)
-        let memText = String(format: "%3d", memPercent).replacingOccurrences(of: " ", with: figureSpace)
+        let cpuText = alignedPercent(snapshot.isStale ? nil : snapshot.metrics.cpu.value)
+        let memText = alignedPercent(snapshot.isStale ? nil : snapshot.metrics.memory.value?.percentUsed)
         
         // Only CPU and Memory
-        let text = "CPU:\(cpuText)% RAM:\(memText)%"
+        let text = "CPU: \(cpuText) RAM: \(memText)"
         
         if let button = self.statusItem.button {
             button.font = NSFont.monospacedDigitSystemFont(ofSize: 12, weight: .regular)
             button.title = text
         }
     }
+
+    private func alignedPercent(_ value: Double?) -> String {
+        let text = MetricFormatting.percent(value)
+        return String(repeating: "\u{2007}", count: max(4 - text.count, 0)) + text
+    }
     
-    private func updateStatusBarAsChart(_ metrics: UsageMetrics) {
+    private func updateStatusBarAsChart(_ snapshot: UsageSnapshot) {
         let width: CGFloat = 164
         let height: CGFloat = 22 // Standard status bar height
         let size = NSSize(width: width, height: height)
@@ -113,13 +119,13 @@ class StatusBarController {
         
         // Draw CPU Chart (Left half)
         let cpuRect = NSRect(x: 0, y: 0, width: width / 2 - 3, height: height)
-        let cpuVal = Int(metrics.cpuUsage)
-        drawChart(in: cpuRect, history: viewModel.cpuHistory, color: .white, title: "CPU", value: "\(cpuVal)%")
+        let cpuValue = snapshot.isStale ? "—" : MetricFormatting.percent(snapshot.metrics.cpu.value)
+        drawChart(in: cpuRect, history: snapshot.cpuHistory, date: snapshot.metrics.sampledAt ?? Date(), color: .white, title: "CPU", value: cpuValue)
         
         // Draw RAM Chart (Right half)
         let ramRect = NSRect(x: width / 2 + 3, y: 0, width: width / 2 - 3, height: height)
-        let memPercent = metrics.memoryTotalGB > 0 ? Int((metrics.memoryUsedGB / metrics.memoryTotalGB) * 100) : 0
-        drawChart(in: ramRect, history: viewModel.memoryHistory, color: .white, title: "RAM", value: "\(memPercent)%")
+        let memoryValue = snapshot.isStale ? "—" : MetricFormatting.percent(snapshot.metrics.memory.value?.percentUsed)
+        drawChart(in: ramRect, history: snapshot.memoryHistory, date: snapshot.metrics.sampledAt ?? Date(), color: .white, title: "RAM", value: memoryValue)
         
         img.unlockFocus()
         // Let macOS tint the complete image for the active menu-bar appearance.
@@ -132,7 +138,7 @@ class StatusBarController {
         }
     }
     
-    private func drawChart(in rect: NSRect, history: [Double], color: NSColor, title: String, value: String) {
+    private func drawChart(in rect: NSRect, history: [HistoryPoint], date: Date, color: NSColor, title: String, value: String) {
         // Draw Text
         let paragraph = NSMutableParagraphStyle()
         paragraph.alignment = .right
@@ -175,18 +181,19 @@ class StatusBarController {
         
         // Draw Path in chartRect
         let linePath = NSBezierPath()
-        let stepX = chartRect.width / CGFloat(max(history.count - 1, 1))
-        
-        for (i, v) in history.enumerated() {
-            let x = chartRect.minX + CGFloat(i) * stepX
+        var previousDate: Date?
+        for sample in history {
+            guard let v = sample.value else { previousDate = nil; continue }
+            let x = chartRect.minX + CGFloat(min(max(1 + sample.date.timeIntervalSince(date) / 60, 0), 1)) * chartRect.width
             let normalized = CGFloat(min(max(v, 0), 100)) / 100.0
             let y = chartRect.minY + normalized * (chartRect.height - 4) + 2 // Padding
             
-            if i == 0 {
-                linePath.move(to: NSPoint(x: x, y: y))
-            } else {
+            if let previousDate, sample.date.timeIntervalSince(previousDate) <= 2.5 {
                 linePath.line(to: NSPoint(x: x, y: y))
+            } else {
+                linePath.move(to: NSPoint(x: x, y: y))
             }
+            previousDate = sample.date
         }
         
         color.setStroke()
@@ -198,7 +205,12 @@ class StatusBarController {
         let event = NSApp.currentEvent
         
         if event?.type == .rightMouseUp {
+            hideWindow()
             let menu = NSMenu()
+            let activityItem = NSMenuItem(title: "Open Activity Monitor", action: #selector(openActivityMonitor(_:)), keyEquivalent: "")
+            activityItem.target = self
+            menu.addItem(activityItem)
+            menu.addItem(.separator())
             let aboutItem = NSMenuItem(title: "About", action: #selector(showAbout(_:)), keyEquivalent: "")
             aboutItem.target = self
             menu.addItem(aboutItem)
@@ -223,33 +235,55 @@ class StatusBarController {
     }
     
     @objc func showSettings(_ sender: AnyObject?) {
+        hideWindow()
         SettingsWindowController.shared.showWindow()
+    }
+
+    private func makeDetailView(height: CGFloat) -> DetailView {
+        DetailView(viewModel: viewModel, popupHeight: height,
+                   onSettings: { [weak self] in self?.showSettings(nil) },
+                   onAbout: { [weak self] in self?.showAbout(nil) },
+                   onActivityMonitor: { [weak self] in self?.openActivityMonitor(nil) },
+                   onQuit: { NSApp.terminate(nil) })
+    }
+
+    @objc func openActivityMonitor(_ sender: AnyObject?) {
+        hideWindow()
+        guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.apple.ActivityMonitor") else {
+            showLaunchError("Activity Monitor could not be found on this Mac.")
+            return
+        }
+        NSWorkspace.shared.openApplication(at: url, configuration: .init()) { _, error in
+            if let error {
+                Task { @MainActor [weak self] in self?.showLaunchError(error.localizedDescription) }
+            }
+        }
+    }
+
+    private func showLaunchError(_ message: String) {
+        let alert = NSAlert()
+        alert.messageText = "Couldn’t open Activity Monitor"
+        alert.informativeText = message
+        alert.runModal()
+    }
+
+    func stop() {
+        hideWindow()
+        viewModel.stopTimer()
     }
     
     private func showWindow() {
-        guard let button = statusItem.button else { return }
+        guard let button = statusItem.button, let screen = button.window?.screen ?? NSScreen.main else { return }
+        let openedWithPointer = NSApp.currentEvent?.type == .leftMouseUp
         
-        // Calculate position
-        // Translate button coordinate to screen coordinates
-        // Note: 'button.window' is the status bar window.
         let buttonRectInWindow = button.convert(button.bounds, to: nil)
         let buttonRectInScreen = button.window?.convertToScreen(buttonRectInWindow) ?? .zero
         
-        // Get content size. Wait, NSHostingView should size itself?
-        // We forced DetailView frame(width: 220).
-        // Let's ask the hosting view for its fitting size.
-        let contentSize = window.contentView?.fittingSize ?? CGSize(width: 220, height: 300)
-        
-        // Center X relative to button
-        let x = buttonRectInScreen.origin.x + (buttonRectInScreen.width / 2) - (contentSize.width / 2)
-        
-        // Align Y below button
-        // Screen Y is 0 at bottom. Button Y is top.
-        // buttonRectInScreen.origin.y is the bottom-left corner of the button in screen coords.
-        // We want the window top to be slightly below button bottom.
-        let y = buttonRectInScreen.origin.y - contentSize.height - 5 // 5px gap
-        
-        let frame = NSRect(x: x, y: y, width: contentSize.width, height: contentSize.height)
+        let contentSize = DetailView.popupSize
+        let frame = PopupPlacement.frame(contentSize: contentSize, button: buttonRectInScreen, visibleFrame: screen.visibleFrame)
+        if let hostingView = window.contentView as? NSHostingView<DetailView> {
+            hostingView.rootView = makeDetailView(height: frame.height)
+        }
 
         popupLogger.debug(
             "Popup placement requested: buttonWindow=\(String(describing: button.window), privacy: .public), buttonRect=\(String(describing: buttonRectInScreen), privacy: .public), contentSize=\(String(describing: contentSize), privacy: .public), frame=\(String(describing: frame), privacy: .public)"
@@ -260,7 +294,9 @@ class StatusBarController {
         NSApp.activate(ignoringOtherApps: true)
 
         DispatchQueue.main.async { [weak self] in
-            guard let self else { return }
+            guard let self, self.window.isVisible else { return }
+            // Leave mouse-opened popups neutral; Tab can still focus the menu normally.
+            if openedWithPointer { self.window.makeFirstResponder(nil) }
             self.popupLogger.debug(
                 "Popup placement applied: frame=\(String(describing: self.window.frame), privacy: .public), contentFrame=\(String(describing: self.window.contentView?.frame), privacy: .public)"
             )
@@ -275,6 +311,7 @@ class StatusBarController {
     }
     
     @objc func showAbout(_ sender: AnyObject?) {
+        hideWindow()
         let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "Unknown"
         let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "Unknown"
         
@@ -287,7 +324,7 @@ class StatusBarController {
         SysMonitor
         Version \(version) (Build \(build))
         
-        A simple status bar application that displays your system's CPU and RAM usage.
+        CPU, GPU, memory, network, and disk usage at a glance.
 
         \(copyright)
         """

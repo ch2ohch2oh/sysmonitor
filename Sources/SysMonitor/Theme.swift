@@ -1,14 +1,14 @@
 import SwiftUI
 
 enum WeatherTheme {
-    static let background = Color(red: 0.93, green: 0.93, blue: 0.93)
-    static let backgroundHighlight = Color.white.opacity(0.9)
-    static let border = Color.black.opacity(0.08)
-    static let separator = Color.black.opacity(0.12)
+    static let background = Color(nsColor: .controlBackgroundColor)
+    static let backgroundHighlight = Color(nsColor: .windowBackgroundColor)
+    static let border = Color.primary.opacity(0.08)
+    static let separator = Color.primary.opacity(0.12)
     
-    static let labelPrimary = Color.black.opacity(0.88)
-    static let labelSecondary = Color.black.opacity(0.65)
-    static let labelTertiary = Color.black.opacity(0.45)
+    static let labelPrimary = Color.primary
+    static let labelSecondary = Color.secondary
+    static let labelTertiary = Color.secondary.opacity(0.8)
     
     // Muted semantic colors let the four resource types remain distinguishable
     // while preserving the calm, monochrome-forward visual language.

@@ -17,5 +17,6 @@ let package = Package(
                 .linkedFramework("IOKit")
             ]
         ),
+        .testTarget(name: "SysMonitorTests", dependencies: ["SysMonitor"]),
     ]
 )
