@@ -26,6 +26,33 @@ import Combine
     #expect(snapshot.cpuHistory.count == 1)
 }
 
+@Test func swapHistoryUsesGiBAndPreservesZeroAndIndependentFailures() {
+    var snapshot = UsageSnapshot()
+    let memory = MemoryUsage(usedGB: 12, totalGB: 16)
+    snapshot.append(UsageMetrics(sampledAt: Date(timeIntervalSince1970: 100),
+                                 memory: .available(memory), swap: .available(SwapUsage(usedBytes: 0))))
+    #expect(snapshot.memoryHistory.last?.value == 75)
+    #expect(snapshot.swapHistory.last?.value == 0)
+
+    // A value over 4 GiB exercises the full-width kernel counter, independently of RAM's percentage scale.
+    snapshot.append(UsageMetrics(sampledAt: Date(timeIntervalSince1970: 101),
+                                 memory: .failed("Memory read failed"),
+                                 swap: .available(SwapUsage(usedBytes: 9 * 1_073_741_824))))
+    #expect(snapshot.memoryHistory.last?.value == nil)
+    #expect(snapshot.swapHistory.last?.value == 9)
+
+    snapshot.append(UsageMetrics(sampledAt: Date(timeIntervalSince1970: 102),
+                                 memory: .available(memory), swap: .failed("Swap read failed")))
+    #expect(snapshot.metrics.memory.value?.percentUsed == 75)
+    #expect(snapshot.memoryHistory.last?.value == 75)
+    #expect(snapshot.swapHistory.last?.value == nil)
+
+    snapshot.append(UsageMetrics(sampledAt: Date(timeIntervalSince1970: 163),
+                                 swap: .available(SwapUsage(usedBytes: 536_870_912))))
+    #expect(snapshot.swapHistory.count == 1)
+    #expect(snapshot.swapHistory.last?.value == 0.5)
+}
+
 @Test func staleReadingsAreMarkedUntilANewSampleArrives() {
     var snapshot = UsageSnapshot()
     snapshot.append(UsageMetrics(sampledAt: Date(timeIntervalSince1970: 100), cpu: .available(42)))

@@ -25,7 +25,7 @@ struct HistoryView: View {
                 endpoint(history, color: color, size: geometry.size)
                 endpoint(secondaryHistory, color: secondaryColor, size: geometry.size)
                 if let scaleLabel {
-                    Text(scaleLabel).font(.system(size: 8, weight: .medium, design: .rounded))
+                    Text(scaleLabel).font(DetailTypography.caption)
                         .foregroundColor(.secondary.opacity(0.65))
                         .padding(.trailing, 2)
                 }

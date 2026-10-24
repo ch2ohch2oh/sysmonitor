@@ -18,15 +18,15 @@ struct MetricCard: View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(alignment: .firstTextBaseline, spacing: 4) {
                 Label(title, systemImage: icon)
-                    .font(.system(size: 10, weight: .medium)).foregroundColor(.secondary)
+                    .font(DetailTypography.label).foregroundColor(.secondary)
                 Spacer(minLength: 4)
                 Text(reading.value.map { MetricFormatting.percent($0) } ?? "—")
-                    .font(.system(size: 15, weight: .medium)).monospacedDigit()
+                    .font(DetailTypography.value).monospacedDigit().lineLimit(1)
             }
             if reading.value != nil || history.contains(where: { $0.value != nil }) {
                 HistoryView(history: history, color: color, referenceDate: date).frame(height: 26)
             } else {
-                Text(reading.statusText).font(.system(size: 9))
+                Text(reading.statusText).font(DetailTypography.caption)
                 .frame(maxWidth: .infinity, minHeight: 26, alignment: .leading)
                 .foregroundColor(.secondary)
             }

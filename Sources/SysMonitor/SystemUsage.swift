@@ -16,7 +16,7 @@ actor SystemUsage: UsageSampling {
             lastDiskSample = time
         }
         return UsageMetrics(
-            sampledAt: Date(), cpu: getCPU(at: time), gpu: getGPU(), memory: getMemory(),
+            sampledAt: Date(), cpu: getCPU(at: time), gpu: getGPU(), memory: getMemory(), swap: getSwap(),
             disks: cachedDisks, network: getNetworkRates(at: time), uptimeSeconds: time
         )
     }
@@ -90,19 +90,18 @@ actor SystemUsage: UsageSampling {
         guard result == KERN_SUCCESS, pageSize > 0 else { return .failed("Memory statistics could not be read.") }
         let usedPages = UInt64(info.active_count) + UInt64(info.wire_count) + UInt64(info.compressor_page_count)
         let total = Double(ProcessInfo.processInfo.physicalMemory) / 1_073_741_824
-        var pressureValue: Int32 = 0
-        var size = MemoryLayout<Int32>.size
-        let pressure: MemoryPressure?
-        if sysctlbyname("kern.memorystatus_vm_pressure_level", &pressureValue, &size, nil, 0) == 0 {
-            switch pressureValue {
-            case 1: pressure = .normal
-            case 2: pressure = .warning
-            case 4: pressure = .critical
-            default: pressure = nil
-            }
-        } else { pressure = nil }
         return .available(MemoryUsage(usedGB: min(Double(usedPages) * Double(pageSize) / 1_073_741_824, total),
-                                      totalGB: total, pressure: pressure))
+                                      totalGB: total))
+    }
+
+    private func getSwap() -> Reading<SwapUsage> {
+        var info = xsw_usage()
+        var size = MemoryLayout<xsw_usage>.size
+        guard sysctlbyname("vm.swapusage", &info, &size, nil, 0) == 0,
+              size == MemoryLayout<xsw_usage>.size else {
+            return .failed("Swap usage could not be read.")
+        }
+        return .available(SwapUsage(usedBytes: info.xsu_used))
     }
 
     private func getDisks() -> Reading<[DiskUsage]> {

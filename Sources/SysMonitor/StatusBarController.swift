@@ -324,7 +324,7 @@ class StatusBarController {
         SysMonitor
         Version \(version) (Build \(build))
         
-        CPU, GPU, memory, network, and disk usage at a glance.
+        CPU, GPU, memory, swap, network, and disk usage at a glance.
 
         \(copyright)
         """

@@ -5,7 +5,7 @@
 <div align="center">
   <img src="assets/minichart.png" width="300" alt="MiniChart" />
   <br /><br />
-  <img src="assets/detail-preview.png" width="300" alt="Compact details popup showing CPU, GPU, memory, network, and disk usage" />
+  <img src="assets/detail-preview.png" width="300" alt="Compact details popup showing CPU, GPU, memory, swap, network, and disk usage" />
   <p><sub>Details preview with sample data.</sub></p>
 </div>
 
@@ -13,10 +13,10 @@ SysMonitor is a lightweight, menu-bar system resource monitor for macOS. It prov
 
 - **CPU Usage**: Real-time percentage.
 - **RAM Usage**: Real-time percentage and Used/Total GB.
+- **Swap Usage**: Disk space used for swap, in GiB, with a separate history chart.
 - **Disk Usage**: Used/Total GB.
 - **GPU Usage**: Utilization when supported by your Mac.
-- **Network**: Wi-Fi and Ethernet download/upload rates.
-- **Memory Pressure**: Normal, elevated, or high when available.
+- **Network**: Wi-Fi and Ethernet download/upload rates with separate history charts and scales.
 
 Requires **macOS 13 or later**. Release packaging produces a universal Apple silicon/Intel app by default.
 
@@ -38,7 +38,7 @@ Unsigned builds may be blocked by macOS. After attempting to launch a build you 
 - **Right-click** the menu bar item to access the **About** and **Quit** options.
 - The popup's **… menu** also exposes Settings, About, and Quit. Press **Escape** or click outside to dismiss it.
 - Select **Activity Monitor** to investigate resource use.
-- Charts show the **last 60 seconds**; gaps represent missing samples. Network charts display their current scale.
+- Charts show the **last 60 seconds**; gaps represent missing samples. Swap and network charts display their current scale.
 - Readings distinguish sampling, unavailable counters, and read failures. If updates stop for more than five seconds, the popup marks its readings as stale.
 - CPU is averaged across all cores. RAM is an estimate of active, wired, and compressed memory, in GiB; high usage alone does not imply high memory pressure.
 - Network counts physical Wi-Fi/Ethernet interfaces, excluding VPN and bridge counters to avoid double counting. Rates use binary units (KiB/s, MiB/s).
@@ -51,7 +51,7 @@ swift build
 swift test
 ```
 
-The tests cover counter rollover, interface changes, history gaps, stale readings, overlapping fetches, and popup placement. CI runs them on pull requests and before release packaging.
+The tests cover counter rollover, interface changes, swap units and read failures, history gaps, stale readings, overlapping fetches, and popup placement. CI runs them on pull requests and before release packaging.
 
 For a local native debug bundle:
 

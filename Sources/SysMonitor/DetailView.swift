@@ -26,7 +26,8 @@ struct DetailView: View {
                                    color: .primary.opacity(0.65), date: referenceDate)
                     }
                     sectionDivider
-                    MemoryCard(reading: metrics.memory, history: snapshot.memoryHistory, date: referenceDate)
+                    MemoryCard(reading: metrics.memory, swapReading: metrics.swap,
+                               history: snapshot.memoryHistory, swapHistory: snapshot.swapHistory, date: referenceDate)
                     sectionDivider
                     NetworkCard(reading: metrics.network, downloadHistory: snapshot.downloadHistory,
                                 uploadHistory: snapshot.uploadHistory, date: referenceDate)
@@ -45,9 +46,9 @@ struct DetailView: View {
     private var header: some View {
         HStack(alignment: .center) {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Text("System").font(.system(size: 12, weight: .semibold))
+                Text("System").font(DetailTypography.title)
                 Text(snapshot.isStale ? "Updates paused" : "60s history")
-                    .font(.system(size: 9)).foregroundColor(snapshot.isStale ? .orange : .secondary)
+                    .font(DetailTypography.caption).foregroundColor(snapshot.isStale ? .orange : .secondary)
                 .help(metrics.sampledAt.map { "Last sample: \($0.formatted(date: .omitted, time: .standard))" } ?? "Waiting for the first sample.")
             }
             Spacer()
@@ -78,12 +79,12 @@ struct DetailView: View {
                         Text("Activity Monitor")
                         Image(systemName: "arrow.up.right").font(.system(size: 8, weight: .semibold))
                     }
-                    .font(.system(size: 10, weight: .medium)).foregroundColor(.secondary)
+                    .font(DetailTypography.label).foregroundColor(.secondary)
                 }
                 .buttonStyle(.plain).help("Open Activity Monitor to investigate resource use")
                 Spacer()
                 Text("Up \(MetricFormatting.uptime(metrics.uptimeSeconds))")
-                    .font(.system(size: 9)).foregroundColor(.secondary.opacity(0.8)).monospacedDigit()
+                    .font(DetailTypography.caption).foregroundColor(.secondary.opacity(0.8)).monospacedDigit()
                     .accessibilityLabel("Uptime \(MetricFormatting.uptime(metrics.uptimeSeconds))")
             }
             .padding(.horizontal, 12).padding(.vertical, 8)

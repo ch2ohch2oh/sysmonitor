@@ -32,12 +32,12 @@ enum Reading<Value: Sendable>: Sendable {
 struct MemoryUsage: Sendable {
     let usedGB: Double
     let totalGB: Double
-    let pressure: MemoryPressure?
     var percentUsed: Double { totalGB > 0 ? usedGB / totalGB * 100 : 0 }
 }
 
-enum MemoryPressure: String, Sendable {
-    case normal = "Normal", warning = "Elevated", critical = "High"
+struct SwapUsage: Sendable {
+    let usedBytes: UInt64
+    var usedGB: Double { Double(usedBytes) / 1_073_741_824 }
 }
 
 struct NetworkRates: Sendable {
@@ -58,6 +58,7 @@ struct UsageMetrics: Sendable {
     var cpu: Reading<Double> = .loading
     var gpu: Reading<Double> = .loading
     var memory: Reading<MemoryUsage> = .loading
+    var swap: Reading<SwapUsage> = .loading
     var disks: Reading<[DiskUsage]> = .loading
     var network: Reading<NetworkRates> = .loading
     var uptimeSeconds: TimeInterval = 0
@@ -73,6 +74,7 @@ struct UsageSnapshot: Sendable {
     var cpuHistory: [HistoryPoint] = []
     var gpuHistory: [HistoryPoint] = []
     var memoryHistory: [HistoryPoint] = []
+    var swapHistory: [HistoryPoint] = []
     var downloadHistory: [HistoryPoint] = []
     var uploadHistory: [HistoryPoint] = []
     var isStale = false
@@ -84,6 +86,7 @@ struct UsageSnapshot: Sendable {
         Self.append(&cpuHistory, value: metrics.cpu.value, at: date)
         Self.append(&gpuHistory, value: metrics.gpu.value, at: date)
         Self.append(&memoryHistory, value: metrics.memory.value?.percentUsed, at: date)
+        Self.append(&swapHistory, value: metrics.swap.value?.usedGB, at: date)
         Self.append(&downloadHistory, value: metrics.network.value?.download, at: date)
         Self.append(&uploadHistory, value: metrics.network.value?.upload, at: date)
     }

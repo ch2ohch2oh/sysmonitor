@@ -7,9 +7,9 @@ struct StorageSection: View {
         VStack(alignment: .leading, spacing: 7) {
             HStack {
                 Label("Storage", systemImage: "internaldrive")
-                    .font(.system(size: 11, weight: .medium)).foregroundColor(.secondary)
+                    .font(DetailTypography.label).foregroundColor(.secondary)
                 Spacer()
-                Text("Used / total").font(.system(size: 9)).foregroundColor(.secondary.opacity(0.8))
+                Text("Used / total").font(DetailTypography.caption).foregroundColor(.secondary.opacity(0.8))
             }
             if let disks = reading.value {
                 ForEach(disks) { disk in
@@ -18,8 +18,9 @@ struct StorageSection: View {
                             Text(disk.name).lineLimit(1).truncationMode(.middle)
                             Spacer(minLength: 4)
                             Text(String(format: "%.0f / %.0f GiB", disk.usedGB, disk.totalGB))
+                                .font(DetailTypography.value)
                                 .foregroundColor(.secondary).monospacedDigit().layoutPriority(1)
-                        }.font(.system(size: 10))
+                        }.font(DetailTypography.body)
                         GeometryReader { geometry in
                             Capsule().fill(Color.primary.opacity(0.06))
                                 .overlay(alignment: .leading) {
@@ -32,7 +33,7 @@ struct StorageSection: View {
                     .accessibilityElement(children: .combine)
                 }
             } else {
-                Text(reading.statusText).font(.system(size: 11)).foregroundColor(.secondary).help(reading.explanation)
+                Text(reading.statusText).font(DetailTypography.caption).foregroundColor(.secondary).help(reading.explanation)
             }
         }
         .modifier(MetricSurface())
