@@ -1,9 +1,10 @@
 import SwiftUI
 
 struct DetailView: View {
-    static let popupSize = CGSize(width: 300, height: 380)
+    static let popupSize = CGSize(width: 300, height: 368)
     @ObservedObject var viewModel: SystemUsageViewModel
-    var popupHeight: CGFloat = popupSize.height
+    // A nil height exposes the natural content size for the panel's sizing pass.
+    var popupHeight: CGFloat? = popupSize.height
     var onSettings: () -> Void = {}
     var onAbout: () -> Void = {}
     var onActivityMonitor: () -> Void = {}
@@ -15,32 +16,39 @@ struct DetailView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            header.padding(.horizontal, 12).padding(.top, 10).padding(.bottom, 8)
-            ScrollView {
-                VStack(spacing: 0) {
-                    HStack(spacing: 12) {
-                        MetricCard(title: "CPU", icon: "cpu", reading: metrics.cpu, history: snapshot.cpuHistory,
-                                   color: .primary.opacity(0.65), date: referenceDate)
-                        Rectangle().fill(Color.primary.opacity(0.07)).frame(width: 0.5, height: 38)
-                        MetricCard(title: "GPU", icon: "square.3.layers.3d", reading: metrics.gpu, history: snapshot.gpuHistory,
-                                   color: .primary.opacity(0.65), date: referenceDate)
-                    }
-                    sectionDivider
-                    MemoryCard(reading: metrics.memory, swapReading: metrics.swap,
-                               history: snapshot.memoryHistory, swapHistory: snapshot.swapHistory, date: referenceDate)
-                    sectionDivider
-                    NetworkCard(reading: metrics.network, downloadHistory: snapshot.downloadHistory,
-                                uploadHistory: snapshot.uploadHistory, date: referenceDate)
-                    sectionDivider
-                    StorageSection(reading: metrics.disks)
-                }
-                .padding(.horizontal, 12)
-                .padding(.bottom, 6)
+            header.padding(.horizontal, 12).padding(.top, 12).padding(.bottom, 4)
+            if popupHeight == nil {
+                sections
+            } else {
+                ScrollView { sections }
             }
             footer
         }
         .frame(width: Self.popupSize.width, height: popupHeight)
+        .fixedSize(horizontal: false, vertical: popupHeight == nil)
         .background(WeatherTheme.panelBackground(cornerRadius: 12))
+    }
+
+    private var sections: some View {
+        VStack(spacing: 0) {
+            HStack(alignment: .top, spacing: 12) {
+                MetricCard(title: "CPU", icon: "cpu", reading: metrics.cpu, history: snapshot.cpuHistory,
+                           color: .primary.opacity(0.65), date: referenceDate)
+                MetricColumnDivider()
+                MetricCard(title: "GPU", icon: "square.3.layers.3d", reading: metrics.gpu, history: snapshot.gpuHistory,
+                           color: .primary.opacity(0.65), date: referenceDate)
+            }
+            .modifier(MetricSurface())
+            sectionDivider
+            MemoryCard(reading: metrics.memory, swapReading: metrics.swap,
+                       history: snapshot.memoryHistory, swapHistory: snapshot.swapHistory, date: referenceDate)
+            sectionDivider
+            NetworkCard(reading: metrics.network, downloadHistory: snapshot.downloadHistory,
+                        uploadHistory: snapshot.uploadHistory, date: referenceDate)
+            sectionDivider
+            StorageSection(reading: metrics.disks)
+        }
+        .padding(.horizontal, 12)
     }
 
     private var header: some View {
@@ -67,7 +75,7 @@ struct DetailView: View {
     }
 
     private var sectionDivider: some View {
-        Rectangle().fill(Color.primary.opacity(0.06)).frame(height: 0.5).padding(.vertical, 2)
+        Rectangle().fill(Color.primary.opacity(0.06)).frame(height: 0.5)
     }
 
     private var footer: some View {

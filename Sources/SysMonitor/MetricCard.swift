@@ -2,7 +2,14 @@ import SwiftUI
 
 struct MetricSurface: ViewModifier {
     func body(content: Content) -> some View {
-        content.padding(.vertical, 6)
+        content.padding(.vertical, 8)
+    }
+}
+
+struct MetricColumnDivider: View {
+    var body: some View {
+        Rectangle().fill(Color.primary.opacity(0.07))
+            .frame(width: 0.5, height: 38).padding(.top, 3)
     }
 }
 
@@ -32,7 +39,6 @@ struct MetricCard: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .modifier(MetricSurface())
         .help(reading.value == nil ? reading.explanation : "\(title) utilization · 0–100% · last 60 seconds")
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("\(title), \(reading.value.map { MetricFormatting.percent($0) } ?? reading.statusText)")

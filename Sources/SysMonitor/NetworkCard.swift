@@ -16,9 +16,9 @@ struct NetworkCard: View {
     }
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(alignment: .top, spacing: 12) {
             column("Download", label: "Down", icon: "arrow.down", value: reading.value?.download, history: downloadHistory)
-            Rectangle().fill(Color.primary.opacity(0.07)).frame(width: 0.5, height: 38)
+            MetricColumnDivider()
             column("Upload", label: "Up", icon: "arrow.up", value: reading.value?.upload, history: uploadHistory)
         }
         .modifier(MetricSurface())

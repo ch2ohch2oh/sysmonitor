@@ -4,7 +4,7 @@ struct StorageSection: View {
     let reading: Reading<[DiskUsage]>
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 7) {
+        VStack(alignment: .leading, spacing: 8) {
             HStack {
                 Label("Storage", systemImage: "internaldrive")
                     .font(DetailTypography.label).foregroundColor(.secondary)

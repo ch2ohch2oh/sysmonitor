@@ -18,6 +18,7 @@ class StatusBarController {
     // Shared ViewModel
     private var viewModel = SystemUsageViewModel()
     private var cancellables = Set<AnyCancellable>()
+    private var storageRowCount: Int?
     
     init() {
         statusBar = NSStatusBar.system
@@ -65,7 +66,17 @@ class StatusBarController {
         // Subscribe to metrics updates
         viewModel.$snapshot
             .sink { [weak self] snapshot in
-                self?.updateStatusBar(with: snapshot)
+                guard let self else { return }
+                self.updateStatusBar(with: snapshot)
+                let rowCount = snapshot.metrics.disks.value?.count ?? -1
+                if self.storageRowCount != rowCount {
+                    self.storageRowCount = rowCount
+                    // @Published delivers before the model stores its new snapshot.
+                    DispatchQueue.main.async { [weak self] in
+                        guard let self, self.window.isVisible else { return }
+                        _ = self.positionWindow()
+                    }
+                }
             }
             .store(in: &cancellables)
     }
@@ -239,7 +250,7 @@ class StatusBarController {
         SettingsWindowController.shared.showWindow()
     }
 
-    private func makeDetailView(height: CGFloat) -> DetailView {
+    private func makeDetailView(height: CGFloat?) -> DetailView {
         DetailView(viewModel: viewModel, popupHeight: height,
                    onSettings: { [weak self] in self?.showSettings(nil) },
                    onAbout: { [weak self] in self?.showAbout(nil) },
@@ -272,14 +283,15 @@ class StatusBarController {
         viewModel.stopTimer()
     }
     
-    private func showWindow() {
-        guard let button = statusItem.button, let screen = button.window?.screen ?? NSScreen.main else { return }
-        let openedWithPointer = NSApp.currentEvent?.type == .leftMouseUp
+    private func positionWindow() -> Bool {
+        guard let button = statusItem.button, let screen = button.window?.screen ?? NSScreen.main else { return false }
         
         let buttonRectInWindow = button.convert(button.bounds, to: nil)
         let buttonRectInScreen = button.window?.convertToScreen(buttonRectInWindow) ?? .zero
         
-        let contentSize = DetailView.popupSize
+        let measuredSize = NSHostingView(rootView: makeDetailView(height: nil)).fittingSize
+        let contentSize = CGSize(width: DetailView.popupSize.width,
+                                 height: min(ceil(measuredSize.height / 4) * 4, DetailView.popupSize.height))
         let frame = PopupPlacement.frame(contentSize: contentSize, button: buttonRectInScreen, visibleFrame: screen.visibleFrame)
         if let hostingView = window.contentView as? NSHostingView<DetailView> {
             hostingView.rootView = makeDetailView(height: frame.height)
@@ -290,6 +302,12 @@ class StatusBarController {
         )
         
         window.setFrame(frame, display: true)
+        return true
+    }
+
+    private func showWindow() {
+        let openedWithPointer = NSApp.currentEvent?.type == .leftMouseUp
+        guard positionWindow() else { return }
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
 

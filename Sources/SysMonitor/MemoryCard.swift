@@ -16,12 +16,12 @@ struct MemoryCard: View {
     }
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(alignment: .top, spacing: 12) {
             column(title: "Memory", icon: "memorychip", value: reading.value.map { MetricFormatting.percent($0.percentUsed) },
                    status: reading.statusText, history: history, maximum: 100,
                    caption: reading.value.map { String(format: "%.1f / %.0f GiB", $0.usedGB, $0.totalGB) } ?? "",
                    help: reading.value == nil ? reading.explanation : "Estimated active, wired, and compressed memory. History: last 60 seconds, 0–100%.")
-            Rectangle().fill(Color.primary.opacity(0.07)).frame(width: 0.5, height: 38)
+            MetricColumnDivider()
             column(title: "Swap", icon: "arrow.left.arrow.right", value: swapReading.value.map { String(format: "%.1f GiB", $0.usedGB) },
                    status: swapReading.statusText, history: swapHistory, maximum: swapMaximum,
                    caption: swapHistory.contains(where: { $0.value != nil }) ? String(format: "0–%.0f GiB", swapMaximum) : "",

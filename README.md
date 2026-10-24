@@ -37,6 +37,7 @@ Unsigned builds may be blocked by macOS. After attempting to launch a build you 
 - **Click** the menu bar item (e.g., `CPU: 12% RAM: 45%`) to see detailed stats.
 - **Right-click** the menu bar item to access the **About** and **Quit** options.
 - The popup's **… menu** also exposes Settings, About, and Quit. Press **Escape** or click outside to dismiss it.
+- The popup fits its contents and scrolls for longer disk lists.
 - Select **Activity Monitor** to investigate resource use.
 - Charts show the **last 60 seconds**; gaps represent missing samples. Swap and network charts display their current scale.
 - Readings distinguish sampling, unavailable counters, and read failures. If updates stop for more than five seconds, the popup marks its readings as stale.
